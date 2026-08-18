@@ -3,10 +3,9 @@ import logging
 
 from messaging_lab.config import Settings
 from messaging_lab.db.session import async_engine, async_session_factory
-from messaging_lab.messaging.rabbitmq import (
-    connect_rabbitmq,
-    create_channel,
-    declare_payments_exchange,
+from messaging_lab.messaging.rabbitmq.connection import connect_rabbitmq, create_channel
+from messaging_lab.messaging.rabbitmq.topology.payment_commands import (
+    declare_payment_commands_exchange,
 )
 from messaging_lab.workers.rabbitmq_outbox import RabbitMQOutboxWorker
 
@@ -26,7 +25,7 @@ async def main() -> None:
 
     try:
         channel = await create_channel(connection)
-        exchange = await declare_payments_exchange(channel)
+        exchange = await declare_payment_commands_exchange(channel)
         logger.info("RabbitMQ topology declared; outbox worker is running")
 
         worker = RabbitMQOutboxWorker(

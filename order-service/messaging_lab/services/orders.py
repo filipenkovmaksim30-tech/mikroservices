@@ -184,7 +184,8 @@ class OrderService:
         return created_order
 
     async def get_order(self, order_id: UUID) -> Order:
-        order = await self._order_repository.get_by_id(order_id)
-        if order is None:
-            raise OrderNotFoundError(order_id)
+        async with self._session.begin():
+            order = await self._order_repository.get_by_id(order_id)
+            if order is None:
+                raise OrderNotFoundError(order_id)
         return order

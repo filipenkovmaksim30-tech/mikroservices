@@ -1,14 +1,13 @@
 import asyncio
 
 from messaging_lab.config import Settings
-from messaging_lab.messaging.rabbitmq import (
+from messaging_lab.messaging.rabbitmq.connection import connect_rabbitmq, create_channel
+from messaging_lab.messaging.rabbitmq.publisher import publish_message
+from messaging_lab.messaging.rabbitmq.topology.notifications import (
     ORDER_CREATED_ROUTING_KEY,
-    connect_rabbitmq,
-    declare_events_exchange,
-    create_channel,
-    declare_notifications_queue,
     bind_notifications_queue,
-    publish_message
+    declare_notifications_queue,
+    declare_order_events_exchange,
 )
 
 from datetime import UTC, datetime
@@ -23,7 +22,7 @@ async def main() -> None:
     connection = await connect_rabbitmq(url=settings.rabbitmq_url)
     try:
         channel = await create_channel(connection)
-        exchange = await declare_events_exchange(channel)
+        exchange = await declare_order_events_exchange(channel)
         queue = await declare_notifications_queue(channel)
         await bind_notifications_queue(exchange, queue)
 

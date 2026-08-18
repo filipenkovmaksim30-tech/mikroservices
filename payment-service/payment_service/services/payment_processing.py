@@ -6,7 +6,6 @@ from payment_service.db.models.payments import Payment
 from payment_service.repositories.payments import PaymentRepository
 from payment_service.repositories.inbox import InboxRepository
 
-
 from payment_service.messaging.contracts import PaymentRequestedEnvelope
 
 class PaymentProcessingService:
@@ -24,7 +23,7 @@ class PaymentProcessingService:
 
     async def process(self, event: PaymentRequestedEnvelope) -> bool:
         async with self._session.begin():
-            is_new = self._inbox_repository.try_add(
+            is_new = await self._inbox_repository.try_add(
                 consumer_name=self._consumer_name,
                 event_id=event.event_id,
                 event_type=event.event_type,
@@ -33,11 +32,12 @@ class PaymentProcessingService:
             if not is_new:
                 return False
 
-            #TODO найти payment 
-            #TODO проверить наличие payment
+            existing_payment = await self._payment_repository.get_by_order_id(order_id=event.payload.order_id)
+            if existing_payment is not None:
+                return False
 
             payment = Payment(
-                order_id=event.payload.event_id,
+                order_id=event.payload.order_id,
                 amount=event.payload.amount,
                 currency=event.payload.currency,
             )

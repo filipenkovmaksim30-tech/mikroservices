@@ -7,20 +7,19 @@ from messaging_lab.db.session import async_session_factory, async_engine
 from messaging_lab.config import Settings
 
 from messaging_lab.integrations.smtp import GmailSmtpNotificationProvider
-from messaging_lab.messaging.rabbitmq import (
-    connect_rabbitmq,
-    create_channel,
-    declare_events_exchange,
-    declare_notifications_queue,
+from messaging_lab.messaging.rabbitmq.connection import connect_rabbitmq, create_channel
+from messaging_lab.messaging.rabbitmq.topology.notifications import (
+    bind_dlq,
     bind_notifications_queue,
-    declare_redelivery_exchange,
     bind_redelivery_queue,
+    bind_retry_queue,
     declare_dlq,
     declare_dlx,
-    bind_dlq,
+    declare_notifications_queue,
+    declare_order_events_exchange,
+    declare_redelivery_exchange,
     declare_retry_exchange,
     declare_retry_queue,
-    bind_retry_queue,
 )
 from messaging_lab.services.notifications import NotificationService
 
@@ -32,7 +31,7 @@ async def main() -> None:
     try:
         channel = await create_channel(connection)
         await channel.set_qos(prefetch_count=1)
-        notifications_exchange = await declare_events_exchange(channel)
+        notifications_exchange = await declare_order_events_exchange(channel)
 
         dlx = await declare_dlx(channel)
         dlq = await declare_dlq(channel)

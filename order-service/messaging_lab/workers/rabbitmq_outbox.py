@@ -8,7 +8,7 @@ from aio_pika.abc import AbstractExchange
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from messaging_lab.db.models.rabbitmq_outbox import RabbitMQOutboxEvent
-from messaging_lab.messaging.rabbitmq import publish_message
+from messaging_lab.messaging.rabbitmq.publisher import publish_message
 from messaging_lab.repositories.rabbitmq_outbox import RabbitMQOutboxRepository
 from messaging_lab.messaging.contracts import PaymentRequestedV1, PaymentRequestedEnvelope
 

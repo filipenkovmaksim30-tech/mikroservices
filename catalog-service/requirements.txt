@@ -1,0 +1,8 @@
+
+asyncpg
+fastapi>=0.116,<1
+pydantic>=2.12,<3
+pydantic-settings>=2.10,<3
+sqlalchemy[asyncio]>=2,<3
+structlog>=25.4,<26
+uvicorn[standard]>=0.35,<1

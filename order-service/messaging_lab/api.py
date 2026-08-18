@@ -13,7 +13,7 @@ from messaging_lab.routers.orders import router as orders_router
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
@@ -29,7 +29,7 @@ app = FastAPI(
 
 @app.exception_handler(OrderNotFoundError)
 async def handle_order_not_found(
-    _request: Request,
+    request: Request,
     exc: OrderNotFoundError,
 ) -> JSONResponse:
     return JSONResponse(
@@ -40,7 +40,7 @@ async def handle_order_not_found(
 
 @app.exception_handler(OrderValidationError)
 async def handle_order_validation_error(
-    _request: Request,
+    request: Request,
     exc: OrderValidationError,
 ) -> JSONResponse:
     return JSONResponse(

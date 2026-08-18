@@ -1,0 +1,9 @@
+Payment Service database migrations.
+
+Create a revision from the payment-service directory:
+
+    python -m alembic revision --autogenerate -m "create payment tables"
+
+Apply migrations:
+
+    python -m alembic upgrade head

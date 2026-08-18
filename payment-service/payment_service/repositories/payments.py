@@ -38,3 +38,16 @@ class PaymentRepository:
         statement = select(Payment).where(Payment.order_id == order_id)
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
+
+    async def get_pending_ids(self, limit: int) -> list[UUID]:
+        if limit <= 0:
+            raise ValueError("limit must be positive")
+        statement = (
+            select(Payment.id)
+            .where(Payment.status == PaymentStatus.PENDING)
+            .order_by(Payment.created_at, Payment.id)
+            .limit(limit)
+        )
+
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())

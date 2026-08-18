@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     rabbitmq_password: SecretStr
     rabbitmq_vhost: str = Field(min_length=1)
 
+    outbox_batch_size: int = Field(default=100, gt=0)
+    outbox_poll_interval_seconds: float = Field(default=1.0, gt=0)
+
+    payment_execution_batch_size: int = Field(default=100, gt=0)
+    payment_execution_poll_interval_seconds: float = Field(default=1.0, gt=0)
+    fake_payment_delay_seconds: float = Field(default=5.0, ge=0)
+    fake_payment_should_succeed: bool = True
+
     @property
     def postgresql_url(self) -> URL:
         return URL.create(

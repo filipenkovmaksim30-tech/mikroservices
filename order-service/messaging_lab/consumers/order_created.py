@@ -2,7 +2,8 @@ from aio_pika.abc import AbstractExchange, AbstractIncomingMessage
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from messaging_lab.messaging.rabbitmq import ORDER_RETRY_ROUTING_KEY, publish_message
+from messaging_lab.messaging.rabbitmq.publisher import publish_message
+from messaging_lab.messaging.rabbitmq.topology.notifications import ORDER_RETRY_ROUTING_KEY
 from messaging_lab.repositories.inbox import InboxRepository
 from messaging_lab.schemas.event import EventEnvelope, OrderCreatedV1
 from messaging_lab.services.notifications import (

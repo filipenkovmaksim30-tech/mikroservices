@@ -27,6 +27,31 @@ x-analytics-service: &analytics-service
     KAFKA_CONSUMER_GROUP: ${KAFKA_ANALYTICS_CONSUMER_GROUP}
   restart: unless-stopped
 
+x-payment-service: &payment-service
+  image: payment-service:local
+  build:
+    context: ./payment-service
+  env_file: ./payment-service/.env
+  environment:
+    POSTGRESQL_HOST: payment-postgres
+    POSTGRESQL_PORT: 5432
+    RABBITMQ_HOST: rabbitmq
+    RABBITMQ_PORT: 5672
+  restart: unless-stopped
+
+x-catalog-service: &catalog-service
+  image: catalog-service:local
+  build:
+    context: ./catalog-service
+  env_file: ./catalog-service/.env
+  environment:
+    POSTGRESQL_HOST: catalog-postgres
+    POSTGRESQL_PORT: 5432
+    RABBITMQ_HOST: rabbitmq
+    RABBITMQ_PORT: 5672
+  restart: unless-stopped
+
+
 services:
   order-migrations:
     <<: *order-service
@@ -41,6 +66,22 @@ services:
     command: ["python", "-m", "alembic", "upgrade", "head"]
     depends_on:
       analytics-postgres:
+        condition: service_healthy
+    restart: "no"
+
+  payment-migrations:
+    <<: *payment-service
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    depends_on:
+      payment-postgres:
+        condition: service_healthy
+    restart: "no"
+
+  catalog-migrations:
+    <<: *catalog-service
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    depends_on:
+      catalog-postgres:
         condition: service_healthy
     restart: "no"
 
@@ -61,7 +102,7 @@ services:
     depends_on:
       analytics-migrations:
         condition: service_completed_successfully
-
+########
   order-publisher:
     <<: *order-service
     command: ["python", "-m", "messaging_lab.workers.rabbitmq_outbox_publisher"]
@@ -69,7 +110,18 @@ services:
       order-migrations:
         condition: service_completed_successfully
       rabbitmq:
-        condition: service_healthy  
+        condition: service_healthy 
+
+  kafka-publisher:
+    <<: *order-service
+    command: ["python", "-m", "messaging_lab.workers.kafka_outbox_publisher"]
+    depends_on:
+      order-migrations:
+        condition: service_completed_successfully
+      kafka-init:
+        condition: service_completed_successfully
+      
+
   notifications-consumer:
     <<: *order-service
     command: ["python", "-m", "messaging_lab.workers.notifications"]
@@ -78,6 +130,40 @@ services:
         condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
+  order-payment-results:
+    <<: *order-service
+    command: ["python", "-m", "messaging_lab.workers.payment_results"]
+    depends_on:
+      order-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+  payment-handler:
+    <<: *payment-service
+    command: ["python", "-m", "payment_service.workers.payment_handler"]
+    depends_on:
+      payment-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+  
+  payment-execution-worker:
+    <<: *payment-service
+    command: ["python", "-m", "payment_service.workers.payment_execution"]
+    depends_on:
+      payment-migrations:
+        condition: service_completed_successfully
+  
+  payment-outbox-publisher:
+    <<: *payment-service
+    command: ["python", "-m", "payment_service.workers.rabbitmq_outbox_publisher"]
+    depends_on:
+      payment-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+  
+
   analytics-consumer:
     <<: *analytics-service
     command: ["python", "-m", "analytics_service.workers.kafka_consumer"]
@@ -147,6 +233,42 @@ services:
       timeout: 5s
       retries: 5
 
+    restart: unless-stopped
+  
+  payment-postgres:
+    image: postgres:15-alpine
+    container_name: payment_postgres
+    environment:
+      POSTGRES_USER: ${PAYMENTS_POSTGRESQL_USER}
+      POSTGRES_PASSWORD: ${PAYMENTS_POSTGRESQL_PASSWORD}
+      POSTGRES_DB: ${PAYMENTS_POSTGRESQL_DB}
+    ports:
+      - "${PAYMENTS_POSTGRESQL_PORT}:5432"
+    volumes:
+      - payment_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PAYMENTS_POSTGRESQL_USER} -d ${PAYMENTS_POSTGRESQL_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  catalog-postgres:
+    image: postgres:15-alpine
+    container_name: catalog_postgres
+    environment:
+      POSTGRES_USER: ${CATALOG_POSTGRESQL_USER}
+      POSTGRES_PASSWORD: ${CATALOG_POSTGRESQL_PASSWORD}
+      POSTGRES_DB: ${CATALOG_POSTGRESQL_DB}
+    ports:
+      - "${CATALOG_POSTGRESQL_PORT}:5432"
+    volumes:
+      - catalog_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${CATALOG_POSTGRESQL_USER} -d ${CATALOG_POSTGRESQL_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
 
@@ -219,19 +341,13 @@ services:
           --partitions "${KAFKA_ANALYTICS_DLQ_PARTITIONS}" \
           --replication-factor 1
     restart: "no"
-  kafka-publisher:
-    <<: *order-service
-    command: ["python", "-m", "messaging_lab.workers.kafka_outbox_publisher"]
-    depends_on:
-      order-migrations:
-        condition: service_completed_successfully
-      kafka-init:
-        condition: service_completed_successfully
-      
 
 volumes:
   rabbitmq_data:
+  kafka_data:
   orders_postgres_data:
   analytics_postgres_data:
-  kafka_data:
+  payment_postgres_data:
+  catalog_postgres_data:
+  
     
