@@ -5,7 +5,7 @@ from payment_service.db.models.payments import Payment
 
 from payment_service.repositories.payments import PaymentRepository
 from payment_service.repositories.inbox import InboxRepository
-
+from payment_service.exceptions import PaymentRequestConflictError
 from payment_service.messaging.contracts import PaymentRequestedEnvelope
 
 class PaymentProcessingService:
@@ -34,7 +34,21 @@ class PaymentProcessingService:
 
             existing_payment = await self._payment_repository.get_by_order_id(order_id=event.payload.order_id)
             if existing_payment is not None:
-                return False
+                same_payment = (
+                    existing_payment.amount == event.payload.amount
+                    and existing_payment.currency == event.payload.currency
+                )
+
+                if same_payment:
+                    return False
+
+                raise PaymentRequestConflictError(
+                    order_id=event.payload.order_id,
+                    existing_amount=existing_payment.amount,
+                    requested_amount=event.payload.amount,
+                    existing_currency=existing_payment.currency,
+                    requested_currency=event.payload.currency,
+                )
 
             payment = Payment(
                 order_id=event.payload.order_id,

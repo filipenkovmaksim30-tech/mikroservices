@@ -5,11 +5,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from messaging_lab.db.models.order import OrderStatus
 from messaging_lab.repositories.inbox import InboxRepository
 from messaging_lab.repositories.orders import OrderRepository
-from messaging_lab.exceptions import OrderNotFoundError
 from messaging_lab.messaging.contracts import (
     PaymentResultEnvelope,
     PaymentFailedEnvelope,
     PaymentSucceededEnvelope
+)
+
+from messaging_lab.exceptions import (
+    PaymentAmountMismatchError,
+    OrderNotFoundError,
+    InvalidOrderPaymentStatusError
 )
 
 
@@ -42,14 +47,22 @@ class PaymentResultService:
                 raise OrderNotFoundError(order_id=event.payload.order_id)
 
             if order.total_amount != event.payload.amount:
-                raise ValueError("Payment amount does not match order total")
+                raise PaymentAmountMismatchError(
+                    order_id=order.id,
+                    expected_amount=order.total_amount,
+                    actual_amount=event.payload.amount,
+                )
 
             if isinstance(event, PaymentSucceededEnvelope):
                 if order.status is OrderStatus.PAID:
                     return False
 
                 if order.status is not OrderStatus.PENDING_PAYMENT:
-                    raise ValueError(f"Cannot mark order as paid from status {order.status}")
+                    raise InvalidOrderPaymentStatusError(
+                        order_id=order.id,
+                        current_order_status=order.status.value,
+                        target_order_status=OrderStatus.PAID.value,
+                    )
 
                 await self._order_repository.mark_paid(order=order)
 
@@ -58,7 +71,11 @@ class PaymentResultService:
                     return False
 
                 if order.status is not OrderStatus.PENDING_PAYMENT:
-                    raise ValueError(f"Cannot mark order as payment_failed from status {order.status}")
+                    raise InvalidOrderPaymentStatusError(
+                        order_id=order.id,
+                        current_order_status=order.status.value,
+                        target_order_status=OrderStatus.PAYMENT_FAILED.value,
+                    )
 
                 await self._order_repository.mark_payment_failed(order=order)
 

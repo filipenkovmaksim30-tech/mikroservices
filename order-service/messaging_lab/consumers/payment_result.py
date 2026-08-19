@@ -7,6 +7,7 @@ from messaging_lab.messaging.contracts import PaymentResultEnvelope
 from messaging_lab.repositories.inbox import InboxRepository
 from messaging_lab.repositories.orders import OrderRepository
 from messaging_lab.services.payment_result import PaymentResultService
+from messaging_lab.exceptions import PermanentPaymentResultError
 
 PAYMENT_RESULT_ADAPTER = TypeAdapter(PaymentResultEnvelope)
 
@@ -21,17 +22,25 @@ async def handler_payment_result(
     except ValidationError:
         await message.reject(requeue=False)
         return
+    
+    try:
+        async with session_factory() as session:
+            inbox_repository = InboxRepository(session)
+            order_repository = OrderRepository(session)
+            service = PaymentResultService(
+                session=session,
+                inbox_repository=inbox_repository,
+                order_repository=order_repository,
+                consumer_name=consumer_name,
+            )
 
-    async with session_factory() as session:
-        inbox_repository = InboxRepository(session)
-        order_repository = OrderRepository(session)
-        service = PaymentResultService(
-            session=session,
-            inbox_repository=inbox_repository,
-            order_repository=order_repository,
-            consumer_name=consumer_name,
-        )
+        
+            await service.process(event=event)
 
-        await service.process(event=event)
+    except PermanentPaymentResultError:
+        await message.reject(requeue=False)
+        return 
+        
+
 
     await message.ack()

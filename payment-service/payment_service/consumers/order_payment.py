@@ -8,6 +8,7 @@ from payment_service.repositories.inbox import InboxRepository
 from payment_service.repositories.payments import PaymentRepository
 from payment_service.messaging.contracts import PaymentRequestedEnvelope
 from payment_service.services.payment_processing import PaymentProcessingService
+from payment_service.exceptions import PaymentRequestConflictError
 
 async def handle_payment_requested(
     message: AbstractIncomingMessage,
@@ -32,7 +33,10 @@ async def handle_payment_requested(
             f"message_id={message.message_id}",
             f"errors={exc.error_count()}",
         )
-
+        await message.reject(requeue=False)
+        return
+    
+    except PaymentRequestConflictError:
         await message.reject(requeue=False)
         return
     

@@ -10,6 +10,7 @@ from payment_service.services.payment_provider import PaymentProvider
 from payment_service.messaging.contracts import PaymentFailedV1, PaymentSucceededV1
 from payment_service.db.models.payments import Payment, PaymentStatus
 from payment_service.db.models.payments_outbox import RabbitMQOutboxEvent
+from payment_service.exceptions  import PaymentRequestConflictError
 
 class PaymentExecuteService:
     def __init__(
