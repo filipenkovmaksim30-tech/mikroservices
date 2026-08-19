@@ -102,7 +102,7 @@ services:
     depends_on:
       analytics-migrations:
         condition: service_completed_successfully
-########
+
   order-publisher:
     <<: *order-service
     command: ["python", "-m", "messaging_lab.workers.rabbitmq_outbox_publisher"]
