@@ -1,11 +1,12 @@
 
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from catalog_service.db.models.products import Product
 from catalog_service.repositories.products import ProductRepository
 from catalog_service.exceptions import ProductNotFoundError, InsufficientStockError, ProductsNotFoundError
+from catalog_service.schemas.products import ProductCreate
 
 class ProductsService:
     def __init__(
@@ -16,7 +17,11 @@ class ProductsService:
         self._session = session
         self._repository = repository
 
-    async def create_product(self, product: Product) -> Product:
+    async def create_product(self, product_data: ProductCreate) -> Product:
+        product = Product(
+            id=uuid4(),
+            **product_data.model_dump(),
+        )
         async with self._session.begin():
             new_product = await self._repository.add(product)
         return new_product

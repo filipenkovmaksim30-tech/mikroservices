@@ -103,6 +103,15 @@ services:
       analytics-migrations:
         condition: service_completed_successfully
 
+  catalog-api:
+    <<: *catalog-service
+    command: ["python", "-m", "uvicorn", "catalog_service.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8002:8000"
+    depends_on:
+      catalog-migrations:
+        condition: service_completed_successfully
+
   order-publisher:
     <<: *order-service
     command: ["python", "-m", "messaging_lab.workers.rabbitmq_outbox_publisher"]

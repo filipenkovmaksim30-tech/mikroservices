@@ -21,6 +21,6 @@ COPY alembic.ini .
 COPY alembic ./alembic
 
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --locked --no-install-project --no-editable
+    uv sync --locked --no-editable
 
 CMD [ "python", "-m", "uvicorn", "payment_service.api:app", "--host", "0.0.0.0", "--port", "8000"]

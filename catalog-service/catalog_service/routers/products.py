@@ -20,7 +20,7 @@ SessionDependency = Annotated[AsyncSession, Depends(get_session)]
 async def get_product_service(session: SessionDependency) -> ProductsService:
     return ProductsService(
         session=session,
-        repository=ProductRepository,
+        repository=ProductRepository(session=session),
     )
 
 ServiceDependency = Annotated[ProductsService, Depends(get_product_service)]
@@ -32,10 +32,10 @@ ServiceDependency = Annotated[ProductsService, Depends(get_product_service)]
      summary="Создать товар",
 )
 async def create_product(
-    product: ProductCreate,
+    product_data: ProductCreate,
     service: ServiceDependency,
-):
-    return await service.create_product(product=product)
+):  
+    return await service.create_product(product_data=product_data)
 
 
 @router.get(
@@ -49,16 +49,3 @@ async def get_by_id(
     service: ServiceDependency
 ):
     return await service.get_product_by_id(product_id=product_id)
-
-
-@router.get(
-    "/{products_ids}",
-    response_model=list[ProductRead],
-    status_code=status.HTTP_200_OK,
-    summary="Получить товары по ID",
-)
-async def get_by_id(
-    product_ids: set[UUID],
-    service: ServiceDependency
-):
-    return await service.get_products_by_ids(product_ids=product_ids)
