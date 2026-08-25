@@ -13,5 +13,6 @@ build/
 .idea/
 .agents
 .vscode
+secrets/
 
 

@@ -51,6 +51,16 @@ x-catalog-service: &catalog-service
     RABBITMQ_PORT: 5672
   restart: unless-stopped
 
+x-auth-service: &auth-service
+  image: auth-service:local
+  build:
+    context: ./auth-service
+  env_file: ./auth-service/.env
+  environment:
+    POSTGRESQL_HOST: auth-postgres
+    POSTGRESQL_PORT: 5432
+  restart: unless-stopped
+
 
 services:
   order-migrations:
@@ -85,6 +95,14 @@ services:
         condition: service_healthy
     restart: "no"
 
+  auth-migrations:
+    <<: *auth-service
+    command: ["python", "-m", "alembic", "upgrade", "head"]
+    depends_on:
+      auth-postgres:
+        condition: service_healthy
+    restart: "no"
+
 
   order-api:
     <<: *order-service
@@ -111,6 +129,16 @@ services:
     depends_on:
       catalog-migrations:
         condition: service_completed_successfully
+
+  auth-api:
+    <<: *auth-service
+    command: ["python", "-m", "uvicorn", "auth_service.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8004:8000"
+    depends_on:
+      auth-migrations:
+        condition: service_completed_successfully
+  
 
   order-publisher:
     <<: *order-service
@@ -279,6 +307,24 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+  
+  auth-postgres:
+    image: postgres:15-alpine
+    container_name: auth_postgres
+    environment:
+      POSTGRES_USER: ${AUTH_POSTGRESQL_USER}
+      POSTGRES_PASSWORD: ${AUTH_POSTGRESQL_PASSWORD}
+      POSTGRES_DB: ${AUTH_POSTGRESQL_DB}
+    ports:
+      - "${AUTH_POSTGRESQL_PORT}:5432"
+    volumes:
+      - auth_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AUTH_POSTGRESQL_USER} -d ${AUTH_POSTGRESQL_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
 
 
   kafka:
@@ -358,5 +404,6 @@ volumes:
   analytics_postgres_data:
   payment_postgres_data:
   catalog_postgres_data:
+  auth_postgres_data:
   
     
