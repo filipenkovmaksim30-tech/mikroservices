@@ -1,17 +1,15 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from auth_service.db.session import get_session
-from auth_service.schemas.users import UserRegister, UserRead
 from auth_service.repositories.users import UserRepository
-from auth_service.services.register import RegistrationService
+from auth_service.routers.dependencies import SessionDependency
+from auth_service.schemas.users import UserRead, UserRegister
 from auth_service.security.passwords import PasswordHasher
+from auth_service.services.register import RegistrationService
 
-SessionDependency = Annotated[AsyncSession, Depends(get_session)]
 
-async def get_register_service(session: SessionDependency):
+def get_register_service(session: SessionDependency) -> RegistrationService:
     return RegistrationService(
         session=session,
         user_repository=UserRepository(session),
@@ -27,10 +25,11 @@ router = APIRouter(prefix="/auth", tags=["Registration"])
     "/register",
     response_model=UserRead,
     status_code=status.HTTP_201_CREATED,
-    description="Регистрация пользователей",
+    summary="Регистрация пользователей",
 )
 async def register(
     service: ServiceDependency,
     user_data: UserRegister,
 ) -> UserRead:
-    return await service.register(user_register=user_data)
+    user = await service.register(user_register=user_data)
+    return UserRead.model_validate(user)

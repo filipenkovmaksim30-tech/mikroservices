@@ -1,5 +1,6 @@
 from pwdlib import PasswordHash
 
+
 class PasswordHasher:
     def __init__(self) -> None:
         self._password_hash = PasswordHash.recommended()

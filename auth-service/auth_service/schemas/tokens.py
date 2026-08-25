@@ -1,8 +1,9 @@
-from typing import Literal
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
 
 class TokenResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")

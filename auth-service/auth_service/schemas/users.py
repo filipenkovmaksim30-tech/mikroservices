@@ -2,8 +2,7 @@ from datetime import datetime
 from typing import Self
 from uuid import UUID
 
-from pydantic import BaseModel, Field, EmailStr, field_validator, model_validator, ConfigDict
-
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
 
 
 class UserRegister(BaseModel):

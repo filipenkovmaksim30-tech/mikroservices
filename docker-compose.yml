@@ -59,6 +59,8 @@ x-auth-service: &auth-service
   environment:
     POSTGRESQL_HOST: auth-postgres
     POSTGRESQL_PORT: 5432
+  volumes:
+    - ./auth-service/secrets:/app/secrets:ro
   restart: unless-stopped
 
 

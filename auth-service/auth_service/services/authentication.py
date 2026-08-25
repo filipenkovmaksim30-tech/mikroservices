@@ -1,13 +1,10 @@
 from anyio import to_thread
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from auth_service.db.models.users import User, UserStatus
+from auth_service.exceptions import InvalidCredentialsError, UserBlockedError
 from auth_service.repositories.users import UserRepository
 from auth_service.security.passwords import PasswordHasher
-from auth_service.exceptions import InvalidCredentialsError, UserBlockedError
-
-
 
 
 class AuthenticationService:

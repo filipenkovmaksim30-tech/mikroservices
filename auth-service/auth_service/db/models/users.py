@@ -1,18 +1,18 @@
 import enum
-
-from uuid import UUID, uuid4
 from datetime import datetime
+from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, Enum, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from auth_service.db.models.base import Base
 
-class UserRole(str, enum.Enum):
+
+class UserRole(enum.StrEnum):
     USER = "user"
     ADMIN = "admin"
 
-class UserStatus(str, enum.Enum):
+class UserStatus(enum.StrEnum):
     ACTIVE = "active"
     BLOCKED = "blocked"
 
@@ -33,7 +33,15 @@ class User(Base):
         default=UserStatus.ACTIVE,
         server_default=UserStatus.ACTIVE.value,
     )
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, onupdate=func.now())
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        onupdate=func.now(),
+    )
 
     

@@ -1,12 +1,12 @@
-import jwt
-
-from pydantic import ValidationError
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
+import jwt
+from pydantic import ValidationError
+
 from auth_service.db.models.users import UserRole
-from auth_service.schemas.token import AccessTokenPayload
 from auth_service.exceptions import InvalidAccessTokenError
+from auth_service.schemas.tokens import AccessTokenPayload
 
 
 class TokenService:

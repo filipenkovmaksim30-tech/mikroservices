@@ -1,9 +1,9 @@
 
 
 
+from auth_service.schemas.tokens import TokenResponse
 from auth_service.security.tokens import TokenService
 from auth_service.services.authentication import AuthenticationService
-from auth_service.schemas.tokens import TokenResponse
 
 
 class LoginService:

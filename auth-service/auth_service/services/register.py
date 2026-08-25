@@ -1,15 +1,15 @@
 
 
 from anyio import to_thread
-
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from auth_service.db.models.users import User
+from auth_service.exceptions import EmailAlreadyRegisteredError
+from auth_service.repositories.users import UserRepository
 from auth_service.schemas.users import UserRegister
 from auth_service.security.passwords import PasswordHasher
-from auth_service.db.models.users import User
-from auth_service.repositories.users import UserRepository
-from auth_service.exceptions import EmailAlreadyRegisteredError
+
 
 class RegistrationService:
     def __init__(
