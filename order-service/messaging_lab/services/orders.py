@@ -189,3 +189,17 @@ class OrderService:
             if order is None:
                 raise OrderNotFoundError(order_id)
         return order
+
+    async def get_orders_by_customer(
+        self,
+        customer_id: UUID,
+        limit: int,
+        offset: int,
+    ) -> list[Order]:
+        async with self._session.begin():
+            orders = await self._order_repository.list_by_customer_id(
+                customer_id=customer_id,
+                limit=limit,
+                offset=offset,
+            )
+        return orders

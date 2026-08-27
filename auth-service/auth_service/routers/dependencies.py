@@ -70,5 +70,6 @@ async def get_current_admin(
 ) -> User:
     if current_user.role is not UserRole.ADMIN:
         raise PermissionDeniedError()
+    return current_user
 
 CurrentAdminDependency = Annotated[User, Depends(get_current_admin)]

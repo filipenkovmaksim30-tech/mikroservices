@@ -1,6 +1,15 @@
 from decimal import Decimal
 from uuid import UUID
 
+class InvalidAccessTokenError(Exception):
+    def __init__(self) -> None:
+        super().__init__("Invalid access token")
+
+
+class PermissionDeniedError(Exception):
+    def __init__(self) -> None:
+        super().__init__("Administrator privileges required")
+
 
 class OrderValidationError(Exception):
     """Base error for an order request that is structurally valid but cannot be fulfilled."""

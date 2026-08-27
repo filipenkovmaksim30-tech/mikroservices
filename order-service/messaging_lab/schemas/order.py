@@ -17,7 +17,6 @@ class OrderItemCreate(ContractModel):
 
 
 class OrderCreate(ContractModel):
-    customer_id: UUID
     receipt_email: EmailStr
     items: list[OrderItemCreate] = Field(min_length=1, max_length=100)
 

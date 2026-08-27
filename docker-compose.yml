@@ -11,6 +11,7 @@ x-order-service: &order-service
     RABBITMQ_PORT: 5672
     KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     KAFKA_ANALYTICS_TOPIC: ${KAFKA_ANALYTICS_TOPIC}
+    JWT_PUBLIC_KEY_PATH: /run/secrets/auth_jwt_public.pem
   restart: unless-stopped
 
 x-analytics-service: &analytics-service
@@ -111,6 +112,8 @@ services:
     command: ["python", "-m", "uvicorn", "messaging_lab.api:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       - "8000:8000"
+    volumes:
+      - ./auth-service/secrets/jwt_public.pem:/run/secrets/auth_jwt_public.pem:ro
     depends_on:
       order-migrations:
         condition: service_completed_successfully

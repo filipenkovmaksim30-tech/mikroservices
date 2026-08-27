@@ -78,7 +78,7 @@ async def handle_user_blocked(
     )
 
 @app.exception_handler(PermissionDeniedError)
-async def handle_user_blocked(
+async def handle_permission_denied(
     request: Request,
     exc: PermissionDeniedError,
 ) -> JSONResponse:

@@ -1,36 +1,16 @@
 from typing import Annotated
-from uuid import UUID
 
-from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Query, status
 
 from messaging_lab.db.models.order import Order
-from messaging_lab.db.session import get_session
-from messaging_lab.repositories.orders import OrderRepository
-from messaging_lab.repositories.rabbitmq_outbox import RabbitMQOutboxRepository
-from messaging_lab.repositories.kafka_outbox import KafkaOutboxRepository
-from messaging_lab.repositories.products import ProductRepository
 from messaging_lab.schemas.order import OrderCreate, OrderRead
-from messaging_lab.services.orders import CreateOrderItem, OrderService
-
+from messaging_lab.services.orders import CreateOrderItem
+from messaging_lab.routers.dependencies import CurrentPrincipalDependency, OrderServiceDependency
 
 router = APIRouter(tags=["Orders"], prefix="/orders")
 
-SessionDependency = Annotated[AsyncSession, Depends(get_session)]
-
-
-def get_order_service(session: SessionDependency) -> OrderService:
-    return OrderService(
-        session=session,
-        order_repository=OrderRepository(session),
-        product_repository=ProductRepository(session),
-        rabbitmq_outbox_repository=RabbitMQOutboxRepository(session),
-        kafka_outbox_repository=KafkaOutboxRepository(session)
-    )
-
-
-OrderServiceDependency = Annotated[OrderService, Depends(get_order_service)]
-
+LimitQuery = Annotated[int, Query(ge=1, le=100)]
+OffsetQuery = Annotated[int, Query(ge=0)]
 
 @router.post(
     "",
@@ -40,6 +20,7 @@ OrderServiceDependency = Annotated[OrderService, Depends(get_order_service)]
 )
 async def create_order(
     data: OrderCreate,
+    current_customer: CurrentPrincipalDependency,
     service: OrderServiceDependency,
 ) -> Order:
     items = [
@@ -49,17 +30,22 @@ async def create_order(
         )
         for item in data.items
     ]
-    return await service.create_order(customer_id=data.customer_id, receipt_email=str(data.receipt_email), items=items)
+    return await service.create_order(customer_id=current_customer.sub, receipt_email=str(data.receipt_email), items=items)
 
 
 @router.get(
-    "/{order_id}",
-    response_model=OrderRead,
+    "/my",
+    response_model=list[OrderRead],
     status_code=status.HTTP_200_OK,
-    summary="Получить заказ по ID",
+    summary="Получить мои заказы"
 )
-async def get_order(
-    order_id: UUID,
+async def get_my_orders(
+    current_customer: CurrentPrincipalDependency,
     service: OrderServiceDependency,
-) -> Order:
-    return await service.get_order(order_id)
+    limit: LimitQuery = 20,
+    offset: OffsetQuery = 0,
+) -> list[Order]:
+    return await service.get_orders_by_customer(customer_id=current_customer.sub, limit=limit, offset=offset)
+
+
+
