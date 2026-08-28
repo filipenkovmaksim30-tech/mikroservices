@@ -8,10 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth_service.config import Settings
 from auth_service.db.models.users import User, UserRole
 from auth_service.db.session import get_session
+from auth_service.exceptions import PermissionDeniedError
 from auth_service.repositories.users import UserRepository
 from auth_service.security.tokens import TokenService
 from auth_service.services.current_user import CurrentUserService
-from auth_service.exceptions import PermissionDeniedError
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/auth/token",

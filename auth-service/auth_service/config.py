@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     jwt_issuer: str = Field(default="auth-service", min_length=1)
     jwt_audience: str = Field(default="orderflow-services", min_length=1)
 
+    refresh_token_expire_days: int = Field(default=30, gt=0, le=90)
+    refresh_cookie_name: str = Field(default="refresh_token", min_length=1)
+    refresh_cookie_secure: bool = False
+    refresh_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
+
     @property
     def postgresql_url(self) -> URL:
         return URL.create(

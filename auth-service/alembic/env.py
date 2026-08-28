@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 from auth_service.config import Settings
-from auth_service.db.models import User  # noqa: F401
+from auth_service.db.models import RefreshSession, User  # noqa: F401
 from auth_service.db.models.base import Base
 
 # this is the Alembic Config object, which provides

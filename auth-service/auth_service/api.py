@@ -9,12 +9,15 @@ from auth_service.exceptions import (
     EmailAlreadyRegisteredError,
     InvalidAccessTokenError,
     InvalidCredentialsError,
-    UserBlockedError,
+    InvalidRefreshTokenError,
     PermissionDeniedError,
+    UserBlockedError,
 )
 from auth_service.routers.login import router as login_router
+from auth_service.routers.refresh import router as refresh_router
 from auth_service.routers.register import router as register_router
 from auth_service.routers.users import router as users_router
+from auth_service.routers.logout import router as logout_user
 
 
 @asynccontextmanager
@@ -66,6 +69,16 @@ async def handle_invalid_access_token(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
+@app.exception_handler(InvalidRefreshTokenError)
+async def handle_invalid_refresh_token(
+    request: Request,
+    exc: InvalidRefreshTokenError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"detail": str(exc)},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 @app.exception_handler(UserBlockedError)
 async def handle_user_blocked(
@@ -90,3 +103,5 @@ async def handle_permission_denied(
 app.include_router(register_router)
 app.include_router(login_router)
 app.include_router(users_router)
+app.include_router(refresh_router)
+app.include_router(logout_user)

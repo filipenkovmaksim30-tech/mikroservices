@@ -17,6 +17,14 @@ class InvalidAccessTokenError(Exception):
     def __init__(self) -> None:
         super().__init__("Invalid access token")
 
+class InvalidRefreshTokenError(Exception):
+    def __init__(self) -> None:
+        super().__init__("Invalid refresh token")
+
+
+class RefreshTokenReuseError(InvalidRefreshTokenError):
+    """An already revoked refresh token was presented again."""
+
 
 class PermissionDeniedError(Exception):
     def __init__(self) -> None:

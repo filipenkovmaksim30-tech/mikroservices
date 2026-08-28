@@ -1,8 +1,9 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from fastapi.security import OAuth2PasswordRequestForm
 
+from auth_service.repositories.refresh_sessions import RefreshSessionRepository
 from auth_service.repositories.users import UserRepository
 from auth_service.routers.dependencies import (
     SessionDependency,
@@ -23,6 +24,7 @@ def get_login_service(
     user_repository = UserRepository(session=session)
     password_hasher = PasswordHasher()
     return LoginService(
+        session=session,
         authentication_service=AuthenticationService(
             session=session,
             user_repository=user_repository,
@@ -30,6 +32,8 @@ def get_login_service(
         ),
         token_service=token_service,
         access_token_expire_minutes=settings.jwt_access_token_expire_minutes,
+        refresh_repository=RefreshSessionRepository(session),
+        refresh_token_expire_days=settings.refresh_token_expire_days,
     )
 
 LoginFormDependency = Annotated[OAuth2PasswordRequestForm, Depends()]
@@ -47,8 +51,21 @@ router = APIRouter(prefix="/auth", tags=["Login"])
 async def login(
     user_form_data: LoginFormDependency,
     service: LoginServiceDependency,
+    response: Response,
+    settings: SettingsDependency,
 ) -> TokenResponse:
-    return await service.login(
+    result = await service.login(
         email=user_form_data.username,
         password=user_form_data.password,
     )
+    response.set_cookie(
+        key=settings.refresh_cookie_name,
+        value=result.refresh_token,
+        max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
+        expires=result.refresh_token_expires_at,
+        path="/auth",
+        httponly=True,
+        secure=settings.refresh_cookie_secure,
+        samesite=settings.refresh_cookie_samesite,
+    )
+    return result.token_response
