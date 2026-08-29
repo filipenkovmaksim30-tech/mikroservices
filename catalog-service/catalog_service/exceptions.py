@@ -17,3 +17,13 @@ class ProductNotFoundError(Exception):
 class ProductsNotFoundError(Exception):
     def __init__(self, missing_ids: set[UUID]):
         super().__init__(f"Products with ids={missing_ids} not found")
+
+
+class InvalidAccessTokenError(Exception):
+    def __init__(self) -> None:
+        super().__init__("Invalid access token")
+
+
+class PermissionDeniedError(Exception):
+    def __init__(self) -> None:
+        super().__init__("Administrator privileges required")

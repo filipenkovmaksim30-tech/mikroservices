@@ -1,3 +1,6 @@
+from pathlib import Path
+from typing import Literal
+
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -17,6 +20,11 @@ class Settings(BaseSettings):
     postgresql_user: str = Field(min_length=1)
     postgresql_password: SecretStr
     postgresql_db: str = Field(min_length=1)
+
+    jwt_public_key_path: Path
+    jwt_algorithm: Literal["RS256"] = "RS256"
+    jwt_issuer: str = Field(min_length=1, default="auth-service")
+    jwt_audience: str = Field(min_length=1, default="orderflow-services")
 
     @property
     def postgresql_url(self) -> URL:

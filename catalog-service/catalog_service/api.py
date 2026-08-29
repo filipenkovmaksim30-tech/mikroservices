@@ -4,9 +4,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from catalog_service.exceptions import ProductsNotFoundError, ProductNotFoundError, InsufficientStockError, ProductValidationError
+from catalog_service.exceptions import (
+    ProductsNotFoundError, 
+    ProductNotFoundError, 
+    InsufficientStockError,
+    InvalidAccessTokenError,
+    PermissionDeniedError,
+)
 from catalog_service.db.session import async_engine
 from catalog_service.routers.products import router as products_router
+from catalog_service.routers.admin_products import router as admin_products_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -53,9 +60,29 @@ async def handle_product_infficient_stock(
         content={"detail": str(exc)},
     )
 
+@app.exception_handler(InvalidAccessTokenError)
+async def handle_invalid_acces_token(
+    request: Request,
+    exc: InvalidAccessTokenError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        content={"detail": str(exc)},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
+
+@app.exception_handler(PermissionDeniedError)
+async def handle_permission_denied(
+    request: Request,
+    exc: PermissionDeniedError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_403_FORBIDDEN,
+        content={"detail": str(exc)},
+    )
 
 
 app.include_router(products_router)
-
+app.include_router(admin_products_router)
 
