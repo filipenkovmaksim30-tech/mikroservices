@@ -4,6 +4,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
 from auth_service.db.session import async_engine
 from auth_service.exceptions import (
     EmailAlreadyRegisteredError,
@@ -13,12 +16,12 @@ from auth_service.exceptions import (
     PermissionDeniedError,
     UserBlockedError,
 )
+from auth_service.rate_limit import limiter
 from auth_service.routers.login import router as login_router
 from auth_service.routers.refresh import router as refresh_router
 from auth_service.routers.register import router as register_router
 from auth_service.routers.users import router as users_router
 from auth_service.routers.logout import router as logout_user
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -34,6 +37,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.exception_handler(EmailAlreadyRegisteredError)
 async def handle_email_already_registered(

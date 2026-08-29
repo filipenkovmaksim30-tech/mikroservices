@@ -13,6 +13,7 @@ from auth_service.routers.dependencies import (
 )
 from auth_service.schemas.tokens import TokenResponse
 from auth_service.services.refresh import RefreshService
+from auth_service.rate_limit import limiter
 
 router = APIRouter(prefix="/auth", tags=["Refresh"])
 
@@ -38,6 +39,7 @@ RefreshServiceDependency = Annotated[RefreshService, Depends(get_refresh_service
     summary="Обновить refresh-токен",
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("20/minute")
 async def refresh(
     service: RefreshServiceDependency,
     request: Request,
