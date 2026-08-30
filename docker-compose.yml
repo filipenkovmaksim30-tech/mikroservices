@@ -12,6 +12,7 @@ x-order-service: &order-service
     KAFKA_BOOTSTRAP_SERVERS: kafka:9092
     KAFKA_ANALYTICS_TOPIC: ${KAFKA_ANALYTICS_TOPIC}
     JWT_PUBLIC_KEY_PATH: /run/secrets/auth_jwt_public.pem
+    CATALOG_BASE_URL: http://catalog-api:8000
   restart: unless-stopped
 
 x-analytics-service: &analytics-service

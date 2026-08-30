@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     kafka_bootstrap_servers: str = Field(min_length=1)
     kafka_analytics_topic: str = Field(min_length=1)
 
+    catalog_base_url: str = Field(min_length=1)
+    catalog_timeout_seconds: float = Field(default=3.0, gt=0, le=30)
+
     @property
     def rabbitmq_url(self) -> str:
         password = self.rabbitmq_password.get_secret_value()

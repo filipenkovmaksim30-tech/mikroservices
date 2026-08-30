@@ -84,3 +84,29 @@ class InvalidOrderPaymentStatusError(PermanentPaymentResultError):
             f"current_status={current_order_status}, "
             f"target_status={target_order_status}"
         )
+
+class CatalogUnavailableError(Exception):
+    def __init__(self):
+        super().__init__("Catalog Service is temporarily unavailable")
+    
+
+class InvalidCatalogResponseError(Exception):
+    def __init__(self):
+        super().__init__("Catalog Service returned an invalid response")
+
+
+class InsufficientProductStockError(OrderValidationError):
+    def __init__(
+        self,
+        product_id: UUID,
+        requested_quantity: int,
+        available_quantity: int,
+    ) -> None:
+        self.product_id = product_id
+        self.requested_quantity = requested_quantity
+        self.available_quantity = available_quantity
+
+        super().__init__(
+            f"Insufficient stock for product_id={product_id}: "
+            f"requested={requested_quantity}, available={available_quantity}"
+        )

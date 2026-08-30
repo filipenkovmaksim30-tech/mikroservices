@@ -3,26 +3,26 @@ from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID
 
+from messaging_lab.integrations.catalog import CatalogClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from messaging_lab.db.models.order import Order
 from messaging_lab.db.models.order_item import OrderItem
 from messaging_lab.db.models.rabbitmq_outbox import RabbitMQOutboxEvent
 from messaging_lab.db.models.kafka_outbox import KafkaOutboxEvent
-from messaging_lab.db.models.product import Product
 from messaging_lab.exceptions import (
     DuplicateProductsError,
     EmptyOrderError,
     InactiveProductsError,
     OrderNotFoundError,
     ProductsNotFoundError,
+    InsufficientProductStockError
 )
 from messaging_lab.repositories.orders import OrderRepository
 from messaging_lab.repositories.rabbitmq_outbox import RabbitMQOutboxRepository
 from messaging_lab.repositories.kafka_outbox import KafkaOutboxRepository
-from messaging_lab.repositories.products import ProductRepository
-
 from messaging_lab.messaging.contracts import PaymentRequestedV1
+from messaging_lab.schemas.catalog import CatalogProductSnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,13 +36,13 @@ class OrderService:
         self,
         session: AsyncSession,
         order_repository: OrderRepository,
-        product_repository: ProductRepository,
+        catalog_client: CatalogClient,
         rabbitmq_outbox_repository: RabbitMQOutboxRepository,
         kafka_outbox_repository: KafkaOutboxRepository,
     ) -> None:
         self._session = session
         self._order_repository = order_repository
-        self._product_repository = product_repository
+        self._catalog_client = catalog_client
         self._rabbitmq_outbox_repository = rabbitmq_outbox_repository
         self._kafka_outbox_repository = kafka_outbox_repository
 
@@ -65,8 +65,8 @@ class OrderService:
         
         return product_ids
     
-    def _validate_and_index_products(self, requested_ids: set[UUID], products: Sequence[Product]) -> dict[UUID, Product]:
-        products_by_id: dict[UUID, Product] = {}
+    def _validate_and_index_products(self, requested_ids: set[UUID], products: Sequence[CatalogProductSnapshot]) -> dict[UUID, CatalogProductSnapshot]:
+        products_by_id: dict[UUID, CatalogProductSnapshot] = {}
         inactive_ids: set[UUID] = set()
 
         for product in products:
@@ -84,7 +84,22 @@ class OrderService:
         
         return products_by_id
 
-    def _build_order(self, customer_id: UUID, receipt_email: str, items: Sequence[CreateOrderItem], products_by_id: dict[UUID, Product]) -> Order:
+    def _validate_stock(
+        self,
+        items: Sequence[CreateOrderItem],
+        products_by_id: dict[UUID, CatalogProductSnapshot],
+    ) -> None:
+        for item in items:
+            product = products_by_id[item.product_id]
+            if item.quantity > product.stock_quantity:
+                raise InsufficientProductStockError(
+                    product_id=product.id,
+                    requested_quantity=item.quantity,
+                    available_quantity=product.stock_quantity
+                )
+
+
+    def _build_order(self, customer_id: UUID, receipt_email: str, items: Sequence[CreateOrderItem], products_by_id: dict[UUID, CatalogProductSnapshot]) -> Order:
         order_items: list[OrderItem] = []
         total_amount = Decimal("0")
         
@@ -172,9 +187,10 @@ class OrderService:
         items: Sequence[CreateOrderItem],
     ) -> Order:
         product_ids = self._collect_product_ids(items)
+        products = await self._catalog_client.get_products_by_ids(product_ids=product_ids)
+        products_by_id = self._validate_and_index_products(requested_ids=product_ids, products=products)
+        self._validate_stock(items=items, products_by_id=products_by_id)
         async with self._session.begin():
-            products = await self._product_repository.get_by_ids(product_ids)
-            products_by_id = self._validate_and_index_products(requested_ids=product_ids, products=products)
             order = self._build_order(customer_id=customer_id, receipt_email=receipt_email, items=items, products_by_id=products_by_id)
             created_order = await self._order_repository.add(order)
             payment_requested_event = self._build_payment_requested_event(created_order)

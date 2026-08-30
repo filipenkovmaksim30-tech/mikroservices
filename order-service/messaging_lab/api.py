@@ -1,15 +1,19 @@
+import httpx
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from messaging_lab.config import Settings
 from messaging_lab.db.session import async_engine
 from messaging_lab.exceptions import (
     OrderNotFoundError,
     OrderValidationError,
     InvalidAccessTokenError,
-    PermissionDeniedError
+    PermissionDeniedError,
+    InvalidCatalogResponseError,
+    CatalogUnavailableError
 )
 from messaging_lab.routers.orders import router as orders_router
 from messaging_lab.routers.admin_orders import router as admin_orders_router
@@ -17,8 +21,21 @@ from messaging_lab.routers.admin_orders import router as admin_orders_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+
+    settings = Settings()
+    limits = httpx.Limits(max_connections=100, max_keepalive_connections=20)
+
+    timeout = httpx.Timeout(timeout=settings.catalog_timeout_seconds)
+
     try:
-        yield
+
+        async with httpx.AsyncClient(
+            base_url=settings.catalog_base_url,
+            limits=limits,
+            timeout=timeout,
+        ) as catalog_client:
+            app.state.catalog_client = catalog_client
+            yield
     finally:
         await async_engine.dispose()
 
@@ -62,7 +79,6 @@ async def handle_invalid_acces_token(
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-
 @app.exception_handler(PermissionDeniedError)
 async def handle_permission_denied(
     request: Request,
@@ -70,6 +86,27 @@ async def handle_permission_denied(
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_403_FORBIDDEN,
+        content={"detail": str(exc)},
+    )
+
+
+@app.exception_handler(InvalidCatalogResponseError)
+async def handle_invalid_catalog_response(
+    request: Request,
+    exc: InvalidCatalogResponseError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        content={"detail": str(exc)},
+    )
+
+@app.exception_handler(CatalogUnavailableError)
+async def handle_unavaible_catalog(
+    request: Request,
+    exc: CatalogUnavailableError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         content={"detail": str(exc)},
     )
 

@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Annotated
 
-from fastapi import Depends
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,12 +10,12 @@ from messaging_lab.db.session import get_session
 from messaging_lab.repositories.orders import OrderRepository
 from messaging_lab.repositories.rabbitmq_outbox import RabbitMQOutboxRepository
 from messaging_lab.repositories.kafka_outbox import KafkaOutboxRepository
-from messaging_lab.repositories.products import ProductRepository
 from messaging_lab.services.orders import OrderService
 from messaging_lab.config import Settings
 from messaging_lab.exceptions import InvalidAccessTokenError, PermissionDeniedError
 from messaging_lab.schemas.tokens import AccessTokenPayload
 from messaging_lab.security.tokens import TokenVerifier
+from messaging_lab.integrations.catalog import CatalogClient
 
 bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -57,14 +57,23 @@ def require_admin(
     if current_customer.role != "admin":
         raise PermissionDeniedError()
 
+def get_catalog_client(request: Request) -> CatalogClient:
+    return CatalogClient(
+        http_client=request.app.state.catalog_client
+    )
+
+CatalogClientDependency = Annotated[CatalogClient, Depends(get_catalog_client)]
 
 
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
-def get_order_service(session: SessionDependency) -> OrderService:
+def get_order_service(
+    session: SessionDependency,
+    catalog_client: CatalogClientDependency
+) -> OrderService:
     return OrderService(
         session=session,
         order_repository=OrderRepository(session),
-        product_repository=ProductRepository(session),
+        catalog_client=catalog_client,
         rabbitmq_outbox_repository=RabbitMQOutboxRepository(session),
         kafka_outbox_repository=KafkaOutboxRepository(session)
     )
