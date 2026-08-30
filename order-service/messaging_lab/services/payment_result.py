@@ -3,19 +3,18 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from messaging_lab.db.models.order import OrderStatus
+from messaging_lab.exceptions import (
+    InvalidOrderPaymentStatusError,
+    OrderNotFoundError,
+    PaymentAmountMismatchError,
+)
+from messaging_lab.messaging.contracts.payments import (
+    PaymentFailedEnvelope,
+    PaymentResultEnvelope,
+    PaymentSucceededEnvelope,
+)
 from messaging_lab.repositories.inbox import InboxRepository
 from messaging_lab.repositories.orders import OrderRepository
-from messaging_lab.messaging.contracts import (
-    PaymentResultEnvelope,
-    PaymentFailedEnvelope,
-    PaymentSucceededEnvelope
-)
-
-from messaging_lab.exceptions import (
-    PaymentAmountMismatchError,
-    OrderNotFoundError,
-    InvalidOrderPaymentStatusError
-)
 
 
 class PaymentResultService:

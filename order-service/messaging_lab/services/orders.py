@@ -3,25 +3,25 @@ from dataclasses import dataclass
 from decimal import Decimal
 from uuid import UUID
 
-from messaging_lab.integrations.catalog import CatalogClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from messaging_lab.db.models.kafka_outbox import KafkaOutboxEvent
 from messaging_lab.db.models.order import Order
 from messaging_lab.db.models.order_item import OrderItem
 from messaging_lab.db.models.rabbitmq_outbox import RabbitMQOutboxEvent
-from messaging_lab.db.models.kafka_outbox import KafkaOutboxEvent
 from messaging_lab.exceptions import (
     DuplicateProductsError,
     EmptyOrderError,
     InactiveProductsError,
+    InsufficientProductStockError,
     OrderNotFoundError,
     ProductsNotFoundError,
-    InsufficientProductStockError
 )
+from messaging_lab.integrations.catalog import CatalogClient
+from messaging_lab.messaging.contracts.payments import PaymentRequestedV1
+from messaging_lab.repositories.kafka_outbox import KafkaOutboxRepository
 from messaging_lab.repositories.orders import OrderRepository
 from messaging_lab.repositories.rabbitmq_outbox import RabbitMQOutboxRepository
-from messaging_lab.repositories.kafka_outbox import KafkaOutboxRepository
-from messaging_lab.messaging.contracts import PaymentRequestedV1
 from messaging_lab.schemas.catalog import CatalogProductSnapshot
 
 
@@ -65,7 +65,11 @@ class OrderService:
         
         return product_ids
     
-    def _validate_and_index_products(self, requested_ids: set[UUID], products: Sequence[CatalogProductSnapshot]) -> dict[UUID, CatalogProductSnapshot]:
+    def _validate_and_index_products(
+        self,
+        requested_ids: set[UUID],
+        products: Sequence[CatalogProductSnapshot],
+    ) -> dict[UUID, CatalogProductSnapshot]:
         products_by_id: dict[UUID, CatalogProductSnapshot] = {}
         inactive_ids: set[UUID] = set()
 
@@ -99,7 +103,13 @@ class OrderService:
                 )
 
 
-    def _build_order(self, customer_id: UUID, receipt_email: str, items: Sequence[CreateOrderItem], products_by_id: dict[UUID, CatalogProductSnapshot]) -> Order:
+    def _build_order(
+        self,
+        customer_id: UUID,
+        receipt_email: str,
+        items: Sequence[CreateOrderItem],
+        products_by_id: dict[UUID, CatalogProductSnapshot],
+    ) -> Order:
         order_items: list[OrderItem] = []
         total_amount = Decimal("0")
         
@@ -188,10 +198,18 @@ class OrderService:
     ) -> Order:
         product_ids = self._collect_product_ids(items)
         products = await self._catalog_client.get_products_by_ids(product_ids=product_ids)
-        products_by_id = self._validate_and_index_products(requested_ids=product_ids, products=products)
+        products_by_id = self._validate_and_index_products(
+            requested_ids=product_ids,
+            products=products,
+        )
         self._validate_stock(items=items, products_by_id=products_by_id)
         async with self._session.begin():
-            order = self._build_order(customer_id=customer_id, receipt_email=receipt_email, items=items, products_by_id=products_by_id)
+            order = self._build_order(
+                customer_id=customer_id,
+                receipt_email=receipt_email,
+                items=items,
+                products_by_id=products_by_id,
+            )
             created_order = await self._order_repository.add(order)
             payment_requested_event = self._build_payment_requested_event(created_order)
             kafka_event = self._build_order_analytics_event(created_order)

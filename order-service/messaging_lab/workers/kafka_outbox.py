@@ -5,7 +5,10 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from messaging_lab.db.models.kafka_outbox import KafkaOutboxEvent
-from messaging_lab.messaging.contracts import AnalyticsEventEnvelope, OrderCreatedAnalyticsV1
+from messaging_lab.messaging.contracts.analytics import (
+    AnalyticsEventEnvelope,
+    OrderCreatedAnalyticsV1,
+)
 from messaging_lab.messaging.kafka import KafkaEventProducer
 from messaging_lab.repositories.kafka_outbox import KafkaOutboxRepository
 

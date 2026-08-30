@@ -2,17 +2,18 @@ import logging
 
 from aio_pika.abc import AbstractExchange, AbstractIncomingMessage
 from pydantic import TypeAdapter, ValidationError
-
-from sqlalchemy.ext.asyncio import async_sessionmaker, AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from messaging_lab.messaging.contracts import PaymentResultEnvelope
+from messaging_lab.exceptions import OrderNotFoundError, PermanentPaymentResultError
+from messaging_lab.messaging.contracts.payments import PaymentResultEnvelope
 from messaging_lab.messaging.rabbitmq.publisher import publish_message
-from messaging_lab.messaging.rabbitmq.topology.payment_result import PAYMENT_RESULTS_RETRY_ROUTING_KEY
+from messaging_lab.messaging.rabbitmq.topology.payment_result import (
+    PAYMENT_RESULTS_RETRY_ROUTING_KEY,
+)
 from messaging_lab.repositories.inbox import InboxRepository
 from messaging_lab.repositories.orders import OrderRepository
 from messaging_lab.services.payment_result import PaymentResultService
-from messaging_lab.exceptions import PermanentPaymentResultError, OrderNotFoundError
 
 logger = logging.getLogger(__name__)
 
