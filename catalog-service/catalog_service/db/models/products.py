@@ -2,7 +2,7 @@
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
-from sqlalchemy import CheckConstraint, Index, Uuid, String, Integer, Numeric, DateTime, func
+from sqlalchemy import Boolean, CheckConstraint, Index, Uuid, String, Integer, Numeric, DateTime, func, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from catalog_service.db.models.base import Base
@@ -16,6 +16,12 @@ class Product(Base):
     description: Mapped[str | None] = mapped_column(String(200), nullable=True)
     price: Mapped[Decimal] = mapped_column(Numeric(precision=18, scale=2), nullable=False)
     stock_quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=true(),
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 

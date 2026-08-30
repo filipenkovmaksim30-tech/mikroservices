@@ -14,11 +14,6 @@ class ProductNotFoundError(Exception):
     def __init__(self, product_id: UUID):
         super().__init__(f"Product with id={product_id} not found")
 
-class ProductsNotFoundError(Exception):
-    def __init__(self, missing_ids: set[UUID]):
-        super().__init__(f"Products with ids={missing_ids} not found")
-
-
 class InvalidAccessTokenError(Exception):
     def __init__(self) -> None:
         super().__init__("Invalid access token")

@@ -1,5 +1,6 @@
+from uuid import UUID
 
-from sqlalchemy import UUID, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from catalog_service.db.models.products import Product
@@ -16,7 +17,7 @@ class ProductRepository:
         await self._session.flush()
         return product
 
-    async def get_by_id(self, product_id: UUID) -> Product:
+    async def get_by_id(self, product_id: UUID) -> Product | None:
         statement = (
             select(Product).where(Product.id == product_id)
         )
@@ -44,3 +45,19 @@ class ProductRepository:
         statement = select(Product).where(Product.id.in_(product_ids))
         result = await self._session.execute(statement)
         return list(result.scalars().all())
+
+    async def get_list_products(self, limit: int, offset: int) -> list[Product]:
+        statement = (
+            select(Product)
+            .where(Product.is_active.is_(True))
+            .order_by(Product.created_at.desc(), Product.id.desc())
+            .offset(offset)
+            .limit(limit)
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
+    async def count_active(self) -> int:
+        statement = select(func.count(Product.id)).where(Product.is_active.is_(True))
+        result = await self._session.execute(statement)
+        return result.scalar_one()
