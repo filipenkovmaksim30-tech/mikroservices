@@ -13,16 +13,8 @@ if TYPE_CHECKING:
 class StockReservationItem(Base):
     __tablename__ = "stock_reservation_items"
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), default=uuid4, primary_key=True)
-    reservation_id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True),
-        ForeignKey("stock_reservations.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    product_id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True),
-        ForeignKey("products.id", ondelete="RESTRICT"),
-        nullable=False,
-    )
+    reservation_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("stock_reservations.id", ondelete="CASCADE"), nullable=False)
+    product_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     reservation: Mapped["StockReservation"] = relationship(
         back_populates="items",

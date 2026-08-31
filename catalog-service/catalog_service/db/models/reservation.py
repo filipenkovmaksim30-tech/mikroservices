@@ -20,11 +20,7 @@ class StockReservationStatus(StrEnum):
 class StockReservation(Base):
     __tablename__ = "stock_reservations"
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), default=uuid4, primary_key=True)
-    order_id: Mapped[UUID] = mapped_column(
-        Uuid(as_uuid=True),
-        nullable=False,
-        unique=True,
-    )
+    order_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False, unique=True)
     status: Mapped[StockReservationStatus] = mapped_column(
         Enum(
             StockReservationStatus,
@@ -36,11 +32,7 @@ class StockReservation(Base):
         server_default=StockReservationStatus.RESERVED.value,
     )
     failure_code: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     finalized_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     items: Mapped[list["StockReservationItem"]] = relationship(
         back_populates="reservation",

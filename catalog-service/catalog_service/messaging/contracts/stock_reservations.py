@@ -35,9 +35,7 @@ class StockReservationRequestedV1(ContractModel):
 
 class StockReservationRequestedEnvelopeV1(ContractModel):
     event_id: UUID
-    event_type: Literal["stock.reservation.requested"] = (
-        "stock.reservation.requested"
-    )
+    event_type: Literal["stock.reservation.requested"] = "stock.reservation.requested"
     event_version: Literal[1] = 1
     occurred_at: datetime
     correlation_id: UUID

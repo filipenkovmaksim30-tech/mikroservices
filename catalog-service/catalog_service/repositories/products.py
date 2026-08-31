@@ -46,6 +46,16 @@ class ProductRepository:
         result = await self._session.execute(statement)
         return list(result.scalars().all())
 
+    async def get_by_ids_for_update(self, product_ids: set[UUID]) -> list[Product]:
+        statement = (
+            select(Product)
+            .where(Product.id.in_(product_ids))
+            .order_by(Product.id)
+            .with_for_update()
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
+
     async def get_list_products(self, limit: int, offset: int) -> list[Product]:
         statement = (
             select(Product)
