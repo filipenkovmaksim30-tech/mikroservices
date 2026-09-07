@@ -41,7 +41,7 @@ class PaymentResultService:
             if not is_new:
                 return False
 
-            order = await self._order_repository.get_by_id(order_id=event.payload.order_id)
+            order = await self._order_repository.get_by_id_for_update(order_id=event.payload.order_id)
             if order is None:
                 raise OrderNotFoundError(order_id=event.payload.order_id)
 

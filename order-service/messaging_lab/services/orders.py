@@ -19,6 +19,8 @@ from messaging_lab.exceptions import (
 )
 from messaging_lab.integrations.catalog import CatalogClient
 from messaging_lab.messaging.contracts.payments import PaymentRequestedV1
+from messaging_lab.messaging.contracts.stock_reservations import StockReservationRequestedV1
+from messaging_lab.messaging.contracts.analytics import OrderCreatedAnalyticsV1
 from messaging_lab.repositories.kafka_outbox import KafkaOutboxRepository
 from messaging_lab.repositories.orders import OrderRepository
 from messaging_lab.repositories.rabbitmq_outbox import RabbitMQOutboxRepository
@@ -153,36 +155,40 @@ class OrderService:
             payload=payload,
         )
 
-    def _build_payment_requested_event(self, order: Order) -> RabbitMQOutboxEvent:
-        payment_requested = PaymentRequestedV1(
+    def _build_reservation_requested_event(self, order: Order) -> RabbitMQOutboxEvent:
+        reservation_requested = StockReservationRequestedV1(
             order_id=order.id,
-            amount=order.total_amount,
-            currency="RUB",
-        )
-        payload = payment_requested.model_dump(mode="json")
-
-
-        return RabbitMQOutboxEvent(
-            aggregate_id=order.id,
-            event_type="payment.requested",
-            event_version=1,
-            payload=payload
-        )
-    
-    def _build_order_analytics_event(self, order: Order,) -> KafkaOutboxEvent:
-        payload: dict[str, object] = {
-            "order_id": str(order.id),
-            "customer_id": str(order.customer_id),
-            "total_amount": str(order.total_amount),
-            "items": [
+            items=[
                 {
-                    "product_id": str(item.product_id),
+                    "product_id": item.product_id,
                     "quantity": item.quantity,
-                    "unit_price": str(item.unit_price)
                 }
                 for item in order.items
             ],
-        }
+        )
+        payload = reservation_requested.model_dump(mode="json")
+        return RabbitMQOutboxEvent(
+            aggregate_id=order.id,
+            event_type="stock.reservation.requested",
+            event_version=1,
+            payload=payload,
+        )
+    
+    def _build_order_analytics_event(self, order: Order,) -> KafkaOutboxEvent:
+        analytics_event = OrderCreatedAnalyticsV1(
+            order_id=order.id,
+            customer_id=order.customer_id,
+            total_amount=order.total_amount,
+            items=[
+                {
+                    "product_id": item.product_id,
+                    "quantity": item.quantity,
+                    "unit_price": item.unit_price,
+                }
+                for item in order.items
+            ],
+        )
+        payload = analytics_event.model_dump(mode="json")
         return KafkaOutboxEvent(
             aggregate_id=order.id,
             event_type="order.created",
@@ -211,9 +217,9 @@ class OrderService:
                 products_by_id=products_by_id,
             )
             created_order = await self._order_repository.add(order)
-            payment_requested_event = self._build_payment_requested_event(created_order)
+            reservation_requested_event = self._build_reservation_requested_event(created_order)
             kafka_event = self._build_order_analytics_event(created_order)
-            await self._rabbitmq_outbox_repository.add(payment_requested_event)
+            await self._rabbitmq_outbox_repository.add(reservation_requested_event)
             await self._kafka_outbox_repository.add(kafka_event)
         return created_order
 

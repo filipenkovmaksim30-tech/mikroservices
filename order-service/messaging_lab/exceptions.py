@@ -1,6 +1,7 @@
 from decimal import Decimal
 from uuid import UUID
 
+
 class InvalidAccessTokenError(Exception):
     def __init__(self) -> None:
         super().__init__("Invalid access token")
@@ -84,6 +85,21 @@ class InvalidOrderPaymentStatusError(PermanentPaymentResultError):
             f"current_status={current_order_status}, "
             f"target_status={target_order_status}"
         )
+
+class PermanentStockReservationResultError(Exception):
+    """Reservation result cannot be applied after retry."""
+
+
+class InvalidOrderStockStatusError(PermanentStockReservationResultError):
+    def __init__(
+        self,
+        order_id: UUID,
+    ) -> None:
+        self.order_id = order_id
+        super().__init__(
+            f"Cannot change order reservation status for order_id={order_id}"
+        )
+
 
 class CatalogUnavailableError(Exception):
     def __init__(self):

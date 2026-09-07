@@ -158,6 +158,15 @@ services:
       rabbitmq:
         condition: service_healthy 
 
+  order-stock_reservation-results:
+    <<: *order-service
+    command: ["python", "-m", "messaging_lab.workers.stock_reservation_result"]
+    depends_on:
+      order-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+
   kafka-publisher:
     <<: *order-service
     command: ["python", "-m", "messaging_lab.workers.kafka_outbox_publisher"]
@@ -209,6 +218,25 @@ services:
       rabbitmq:
         condition: service_healthy
   
+  catalog-reservation-consumer:
+    <<: *catalog-service
+    command: ["python", "-m", "catalog_service.workers.reservation_commands"]
+    depends_on:
+      catalog-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
+  catalog-reservation-publisher:
+    <<: *catalog-service
+    command: ["python", "-m", "catalog_service.workers.rabbitmq_outbox_publisher"]
+    depends_on:
+      catalog-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
 
   analytics-consumer:
     <<: *analytics-service

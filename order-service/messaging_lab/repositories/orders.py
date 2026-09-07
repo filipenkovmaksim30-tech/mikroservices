@@ -16,6 +16,21 @@ class OrderRepository:
         await self._session.flush()
         return order
 
+    async def get_by_id_for_update(self, order_id: UUID) -> Order | None:
+        statement = select(Order).where(Order.id == order_id).with_for_update()
+        result = await self._session.execute(statement)
+        return result.scalar_one_or_none()
+
+    async def mark_pending_payment(self, order: Order) -> Order:
+        order.status = OrderStatus.PENDING_PAYMENT
+        await self._session.flush()
+        return order
+
+    async def mark_stock_failed(self, order: Order) -> Order:
+        order.status = OrderStatus.STOCK_FAILED
+        await self._session.flush()
+        return order
+
     async def mark_paid(self, order: Order) -> Order:
         order.status = OrderStatus.PAID
         await self._session.flush()
