@@ -9,6 +9,7 @@ from api_gateway.routers.dependencies import get_settings
 from api_gateway.api_clients.http import create_http_client
 from api_gateway.routers.health import router as health_router
 from api_gateway.routers.catalog import router as catalog_router
+from api_gateway.routers.admin_catalog import router as admin_catalog_router
 from api_gateway.routers.auth import router as auth_router
 from api_gateway.exeptions import PermissionDeniedError, InvalidAccessTokenError
 
@@ -77,4 +78,6 @@ async def handle_service_unavailable(
 api_router.include_router(health_router)
 api_router.include_router(catalog_router)
 api_router.include_router(auth_router)
+api_router.include_router(admin_catalog_router)
+
 app.include_router(api_router)

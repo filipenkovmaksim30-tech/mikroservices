@@ -51,7 +51,7 @@ def get_current_principal(
 
 CurrentPrincipalDependency = Annotated[AccessTokenPayload, Depends(get_current_principal)]
 
-def require_admine(
+def require_admin(
     current_admin: CurrentPrincipalDependency
 ) -> None:
     if current_admin.role != "admin":
