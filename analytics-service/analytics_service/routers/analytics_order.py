@@ -1,25 +1,15 @@
-
 from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from analytics_service.services.analytics_orders import AnalyticsOrderService
-from analytics_service.repositories.analytics_order import AnalyticsOrderRepository
-from analytics_service.db.session import get_session
 from analytics_service.schemas.analytics import AnalyticsSummaryResponse, DailySummaryResponse
+from analytics_service.services.analytics_orders import AnalyticsOrderService
 
-router = APIRouter(tags=["Analytics"], prefix="/analytics")
+from analytics_service.routers.dependencies import get_analytics_service, require_admin
 
+router = APIRouter(tags=["Analytics"], prefix="/analytics", dependencies=[Depends(require_admin)])
 
-def get_analytics_service(
-    session: Annotated[AsyncSession, Depends(get_session)]
-):
-    analytics_repository = AnalyticsOrderRepository(session)
-    analytics_service = AnalyticsOrderService(analytics_repository, session)
-    return analytics_service
-    
 
 @router.get("/summary", response_model=AnalyticsSummaryResponse, summary="Получить выручку за период")
 async def get_summary(

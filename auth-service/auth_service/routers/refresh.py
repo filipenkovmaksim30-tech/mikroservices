@@ -66,7 +66,7 @@ async def refresh(
         value=result.refresh_token,
         max_age=remaining_seconds,
         expires=result.refresh_token_expires_at,
-        path="/auth",
+        path=settings.refresh_cookie_path,
         httponly=True,
         secure=settings.refresh_cookie_secure,
         samesite=settings.refresh_cookie_samesite,

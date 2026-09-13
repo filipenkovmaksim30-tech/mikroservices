@@ -35,11 +35,9 @@ async def logout(
     if refresh_token is not None:
         await service.logout(refresh_token)
 
-    await service.logout(refresh_token)
-
     response.delete_cookie(
         key=settings.refresh_cookie_name, 
-        path="/auth",
+        path=settings.refresh_cookie_path,
         httponly=True,
         secure=settings.refresh_cookie_secure,
         samesite=settings.refresh_cookie_samesite,

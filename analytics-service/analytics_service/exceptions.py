@@ -1,5 +1,13 @@
 from uuid import UUID
 
+class InvalidAccessTokenError(Exception):
+    def __init__(self) -> None:
+        super().__init__("Invalid access token")
+
+class PermissionDeniedError(Exception):
+    def __init__(self) -> None:
+        super().__init__("Administrator privileges required")
+
 
 class InvalidAnalyticsPeriodError(Exception):
     """Analytics period is invalid."""

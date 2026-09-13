@@ -29,6 +29,7 @@ class Settings(BaseSettings):
 
     refresh_token_expire_days: int = Field(default=30, gt=0, le=90)
     refresh_cookie_name: str = Field(default="refresh_token", min_length=1)
+    refresh_cookie_path: str = Field(default="/api/auth", min_length=1)
     refresh_cookie_secure: bool = False
     refresh_cookie_samesite: Literal["lax", "strict", "none"] = "lax"
 

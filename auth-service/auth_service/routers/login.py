@@ -67,7 +67,7 @@ async def login(
         value=result.refresh_token,
         max_age=settings.refresh_token_expire_days * 24 * 60 * 60,
         expires=result.refresh_token_expires_at,
-        path="/auth",
+        path=settings.refresh_cookie_path,
         httponly=True,
         secure=settings.refresh_cookie_secure,
         samesite=settings.refresh_cookie_samesite,

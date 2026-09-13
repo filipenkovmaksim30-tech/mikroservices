@@ -1,3 +1,6 @@
+from pathlib import Path
+from typing import Literal
+
 from pydantic import SecretStr, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
@@ -20,6 +23,11 @@ class Settings(BaseSettings):
     kafka_bootstrap_servers: str = Field(min_length=1)
     kafka_consumer_group: str = Field(min_length=1)
     kafka_analytics_dlq_topic: str = Field(min_length=1)
+
+    jwt_public_key_path: Path
+    jwt_algorithm: Literal["RS256"] = "RS256"
+    jwt_issuer: str = Field(min_length=1, default="auth-service")
+    jwt_audience: str = Field(min_length=1, default="orderflow-services")
 
     @property
     def postgresql_url(self) -> URL:

@@ -27,6 +27,7 @@ x-analytics-service: &analytics-service
     KAFKA_ANALYTICS_TOPIC: ${KAFKA_ANALYTICS_TOPIC}
     KAFKA_ANALYTICS_DLQ_TOPIC: ${KAFKA_ANALYTICS_DLQ_TOPIC}
     KAFKA_CONSUMER_GROUP: ${KAFKA_ANALYTICS_CONSUMER_GROUP}
+    JWT_PUBLIC_KEY_PATH: /run/secrets/auth_jwt_public.pem
   restart: unless-stopped
 
 x-payment-service: &payment-service
@@ -64,6 +65,18 @@ x-auth-service: &auth-service
     POSTGRESQL_PORT: 5432
   volumes:
     - ./auth-service/secrets:/app/secrets:ro
+  restart: unless-stopped
+
+x-api-gateway: &api-gateway
+  image: api-gateway:local
+  build:
+    context: ./api-gateway
+  env_file:
+    - ./api-gateway/.env
+  environment:
+    GATEWAY_JWT_PUBLIC_KEY_PATH: /run/secrets/auth_jwt_public.pem
+    GATEWAY_AUTH_BASE_URL: http://auth-api:8000
+    GATEWAY_CATALOG_BASE_URL: http://catalog-api:8000
   restart: unless-stopped
 
 
@@ -113,7 +126,7 @@ services:
     <<: *order-service
     command: ["python", "-m", "uvicorn", "messaging_lab.api:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ./auth-service/secrets/jwt_public.pem:/run/secrets/auth_jwt_public.pem:ro
     depends_on:
@@ -123,7 +136,9 @@ services:
     <<: *analytics-service
     command: ["python", "-m", "uvicorn", "analytics_service.api:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
-      - "8001:8000"
+      - "127.0.0.1:8001:8000"
+    volumes:
+      - ./auth-service/secrets/jwt_public.pem:/run/secrets/auth_jwt_public.pem:ro
     depends_on:
       analytics-migrations:
         condition: service_completed_successfully
@@ -132,7 +147,7 @@ services:
     <<: *catalog-service
     command: ["python", "-m", "uvicorn", "catalog_service.api:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
-      - "8002:8000"
+      - "127.0.0.1:8002:8000"
     volumes:
       - ./auth-service/secrets/jwt_public.pem:/run/secrets/auth_jwt_public.pem:ro
     depends_on:
@@ -143,10 +158,18 @@ services:
     <<: *auth-service
     command: ["python", "-m", "uvicorn", "auth_service.api:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
-      - "8004:8000"
+      - "127.0.0.1:8004:8000"
     depends_on:
       auth-migrations:
         condition: service_completed_successfully
+  
+  api-gateway:
+    <<: *api-gateway
+    command: ["python", "-m", "uvicorn", "api_gateway.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "127.0.0.1:8005:8000"
+    volumes:
+      - ./auth-service/secrets/jwt_public.pem:/run/secrets/auth_jwt_public.pem:ro
   
 
   order-publisher:
@@ -257,8 +280,8 @@ services:
       RABBITMQ_DEFAULT_VHOST: ${RABBITMQ_VHOST}
 
     ports:
-      - "${RABBITMQ_PORT}:5672"
-      - "15672:15672"
+      - "127.0.0.1:${RABBITMQ_PORT}:5672"
+      - "127.0.0.1:15672:15672"
 
     volumes:
       - rabbitmq_data:/var/lib/rabbitmq
@@ -279,7 +302,7 @@ services:
       POSTGRES_PASSWORD: ${ORDER_POSTGRESQL_PASSWORD}
       POSTGRES_DB: ${ORDER_POSTGRESQL_DB}
     ports:
-      - "${ORDER_POSTGRESQL_PORT}:5432"
+      - "127.0.0.1:${ORDER_POSTGRESQL_PORT}:5432"
     volumes:
       - orders_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -298,7 +321,7 @@ services:
       POSTGRES_PASSWORD: ${ANALYTICS_POSTGRESQL_PASSWORD}
       POSTGRES_DB: ${ANALYTICS_POSTGRESQL_DB}
     ports:
-      - "${ANALYTICS_POSTGRESQL_PORT}:5432"
+      - "127.0.0.1:${ANALYTICS_POSTGRESQL_PORT}:5432"
     volumes:
       - analytics_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -317,7 +340,7 @@ services:
       POSTGRES_PASSWORD: ${PAYMENTS_POSTGRESQL_PASSWORD}
       POSTGRES_DB: ${PAYMENTS_POSTGRESQL_DB}
     ports:
-      - "${PAYMENTS_POSTGRESQL_PORT}:5432"
+      - "127.0.0.1:${PAYMENTS_POSTGRESQL_PORT}:5432"
     volumes:
       - payment_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -335,7 +358,7 @@ services:
       POSTGRES_PASSWORD: ${CATALOG_POSTGRESQL_PASSWORD}
       POSTGRES_DB: ${CATALOG_POSTGRESQL_DB}
     ports:
-      - "${CATALOG_POSTGRESQL_PORT}:5432"
+      - "127.0.0.1:${CATALOG_POSTGRESQL_PORT}:5432"
     volumes:
       - catalog_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -353,7 +376,7 @@ services:
       POSTGRES_PASSWORD: ${AUTH_POSTGRESQL_PASSWORD}
       POSTGRES_DB: ${AUTH_POSTGRESQL_DB}
     ports:
-      - "${AUTH_POSTGRESQL_PORT}:5432"
+      - "127.0.0.1:${AUTH_POSTGRESQL_PORT}:5432"
     volumes:
       - auth_postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -382,7 +405,7 @@ services:
       KAFKA_NUM_PARTITIONS: "${KAFKA_NUM_PARTITIONS}"
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
     ports:
-      - "${KAFKA_EXTERNAL_PORT}:29092"
+      - "127.0.0.1:${KAFKA_EXTERNAL_PORT}:29092"
     healthcheck:
       test:
         [
