@@ -22,4 +22,4 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-editable
 
 
-CMD ["python", "-m", "uvicorn", "api_gateway.main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["python", "-m", "uvicorn", "api_gateway.main:app", "--host", "0.0.0.0", "--port", "8000"]

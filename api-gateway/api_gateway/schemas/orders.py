@@ -1,14 +1,22 @@
 from datetime import datetime
 from decimal import Decimal
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from messaging_lab.db.models.order import OrderStatus
+
+class OrderStatus(StrEnum):
+    PENDING_STOCK = "pending_stock"
+    STOCK_FAILED = "stock_failed"
+    PENDING_PAYMENT = "pending_payment"
+    PAID = "paid"
+    PAYMENT_FAILED = "payment_failed"
+    CANCELLED = "cancelled"
+
 
 class ContractModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
 
 class OrderItemCreate(ContractModel):
     product_id: UUID

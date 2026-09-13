@@ -1,15 +1,15 @@
 import jwt
-
 from pydantic import ValidationError
 
+from api_gateway.exceptions import InvalidAccessTokenError
 from api_gateway.schemas.tokens import AccessTokenPayload
-from api_gateway.exeptions import InvalidAccessTokenError
+
 
 class TokenVerifier:
     def __init__(
         self,
         public_key: str,
-        algorithm,
+        algorithm: str,
         issuer: str,
         audience: str
     ) -> None:

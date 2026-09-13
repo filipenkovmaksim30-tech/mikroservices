@@ -14,6 +14,8 @@ class Settings(BaseSettings):
 
     catalog_base_url: str
     auth_base_url: str
+    orders_base_url: str
+    analytics_base_url: str
     refresh_cookie_name: str = Field(default="refresh_token", min_length=1)
 
     jwt_public_key_path: Path
@@ -21,11 +23,11 @@ class Settings(BaseSettings):
     jwt_issuer: str = Field(min_length=1, default="auth-service")
     jwt_audience: str = Field(min_length=1, default="orderflow-services")
 
-    http_connect_timeout: float = 3.00
-    http_read_timeout: float = 10.00
-    http_write_timeout: float = 10.00
-    http_pool_timeout: float = 3.00
+    http_connect_timeout: float = Field(default=3.00, gt=0)
+    http_read_timeout: float = Field(default=10.00, gt=0)
+    http_write_timeout: float = Field(default=10.00, gt=0)
+    http_pool_timeout: float = Field(default=3.00, gt=0)
 
-    http_max_connections: int = 100
-    keepalive_connections: int = 20
+    http_max_connections: int = Field(default=100, gt=0)
+    keepalive_connections: int = Field(default=20, ge=0)
 

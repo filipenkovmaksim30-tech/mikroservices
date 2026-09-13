@@ -1,10 +1,10 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Query, APIRouter, status, Response
+from fastapi import APIRouter, Query, Response, status
 
+from api_gateway.api_clients.http import build_gateway_response, request_upstream
 from api_gateway.routers.dependencies import HttpClientDependency, SettingsDependency
-from api_gateway.api_clients.http import request_upstream, build_gateway_response
 
 LimitQuery = Annotated[int, Query(ge=1, le=100)]
 OffsetQuery = Annotated[int, Query(ge=0)]
@@ -43,7 +43,7 @@ async def get_product_by_id(
     product_id: UUID,
     client: HttpClientDependency,
     settings: SettingsDependency
-):
+) -> Response:
     url= (
         f"{settings.catalog_base_url.rstrip("/")}"
         f"/products/{product_id}"

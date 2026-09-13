@@ -2,19 +2,16 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, status, Depends
+from fastapi import APIRouter, Depends, Response, status
 
-from api_gateway.schemas.catalog import ProductCreate, ProductRead, ProductUpdate
+from api_gateway.api_clients.http import build_gateway_response, request_upstream
 from api_gateway.routers.dependencies import (
-    require_admin, 
-    CurrentPrincipalDependency, 
-    HttpClientDependency, 
-    SettingsDependency, 
-    CredentialsDependency
+    AuthorizationHeadersDependency,
+    HttpClientDependency,
+    SettingsDependency,
+    require_admin,
 )
-from api_gateway.api_clients.http import request_upstream, build_gateway_response
-from api_gateway.exeptions import InvalidAccessTokenError
-
+from api_gateway.schemas.catalog import ProductCreate, ProductRead, ProductUpdate
 
 router = APIRouter(
     tags=["Admin Catalog"], 
@@ -29,23 +26,19 @@ router = APIRouter(
     summary="Создать товар",
 )
 async def create_product(
-    _principal: CurrentPrincipalDependency,
-    credentials: CredentialsDependency,
+    authorization_headers: AuthorizationHeadersDependency,
     payload: ProductCreate,
     client: HttpClientDependency,
     settings: SettingsDependency
-):
+) -> Response:
     url = f"{settings.catalog_base_url.rstrip("/")}/admin/products"
-
-    if credentials is None:
-        raise InvalidAccessTokenError()
 
     upstream_response = await request_upstream(
         client=client,
         method="POST",
         url=url,
         json_body=payload.model_dump(mode="json"),
-        headers={"Authorization": f"Bearer {credentials.credentials}"},
+        headers=authorization_headers,
     )
 
     return build_gateway_response(upstream_response)
@@ -59,24 +52,20 @@ async def create_product(
 )
 
 async def edit_product(
-    _principal: CurrentPrincipalDependency,
-    credentials: CredentialsDependency,
+    authorization_headers: AuthorizationHeadersDependency,
     product_id: UUID,
     product_data: ProductUpdate,
     client: HttpClientDependency,
     settings: SettingsDependency,
-):
+) -> Response:
     url = f"{settings.catalog_base_url.rstrip("/")}/admin/products/{product_id}"
 
-    if credentials is None:
-        raise InvalidAccessTokenError()
-    
     upstream_response = await request_upstream(
         client=client,
         method="PATCH",
         url=url,
         json_body=product_data.model_dump(mode="json", exclude_unset=True),
-        headers={"Authorization": f"Bearer {credentials.credentials}"}
+        headers=authorization_headers,
     )
         
     return build_gateway_response(upstream_response)
@@ -89,26 +78,22 @@ async def edit_product(
 )
 
 async def activate_product(
-    _principal: CurrentPrincipalDependency,
-    credentials: CredentialsDependency,
+    authorization_headers: AuthorizationHeadersDependency,
     product_id: UUID,
     client: HttpClientDependency,
     settings: SettingsDependency,
-):
+) -> Response:
         
     url = (
         f"{settings.catalog_base_url.rstrip("/")}"
         f"/admin/products/{product_id}/activate"
     )
 
-    if credentials is None:
-        raise InvalidAccessTokenError()
-    
     upstream_response = await request_upstream(
         client=client,
         method="POST",
         url=url,
-        headers={"Authorization": f"Bearer {credentials.credentials}"}
+        headers=authorization_headers,
     )
     
     return build_gateway_response(upstream_response)
@@ -120,23 +105,19 @@ async def activate_product(
     summary="Деактивировать товар по ID"
 )
 async def deactivate_product(
-    _principal: CurrentPrincipalDependency,
-    credentials: CredentialsDependency,
+    authorization_headers: AuthorizationHeadersDependency,
     product_id: UUID,
     client: HttpClientDependency,
     settings: SettingsDependency,
-):
+) -> Response:
     
     url = f"{settings.catalog_base_url.rstrip("/")}/admin/products/{product_id}"
-
-    if credentials is None:
-        raise InvalidAccessTokenError()
 
     upstream_response = await request_upstream(
         client=client,
         method="DELETE",
         url=url,
-        headers={"Authorization": f"Bearer {credentials.credentials}"}
+        headers=authorization_headers,
     )
 
     return build_gateway_response(upstream_response)

@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+
 class ContractModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
 

@@ -77,6 +77,8 @@ x-api-gateway: &api-gateway
     GATEWAY_JWT_PUBLIC_KEY_PATH: /run/secrets/auth_jwt_public.pem
     GATEWAY_AUTH_BASE_URL: http://auth-api:8000
     GATEWAY_CATALOG_BASE_URL: http://catalog-api:8000
+    GATEWAY_ORDERS_BASE_URL: http://order-api:8000
+    GATEWAY_ANALYTICS_BASE_URL: http://analytics-api:8000
   restart: unless-stopped
 
 

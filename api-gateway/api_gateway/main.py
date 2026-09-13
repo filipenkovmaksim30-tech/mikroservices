@@ -1,17 +1,20 @@
-import httpx
-
-from contextlib import asynccontextmanager
 from collections.abc import AsyncIterator
-from fastapi import FastAPI, APIRouter, Request, status
+from contextlib import asynccontextmanager
+
+import httpx
+from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from api_gateway.routers.dependencies import get_settings
 from api_gateway.api_clients.http import create_http_client
-from api_gateway.routers.health import router as health_router
-from api_gateway.routers.catalog import router as catalog_router
+from api_gateway.exceptions import InvalidAccessTokenError, PermissionDeniedError
 from api_gateway.routers.admin_catalog import router as admin_catalog_router
+from api_gateway.routers.admin_orders import router as admin_order_router
+from api_gateway.routers.analytics import router as analytic_router
 from api_gateway.routers.auth import router as auth_router
-from api_gateway.exeptions import PermissionDeniedError, InvalidAccessTokenError
+from api_gateway.routers.catalog import router as catalog_router
+from api_gateway.routers.dependencies import get_settings
+from api_gateway.routers.health import router as health_router
+from api_gateway.routers.orders import router as order_router
 
 api_router = APIRouter(prefix="/api")
 
@@ -21,9 +24,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     http_client = create_http_client(settings)
     app.state.http_client = http_client
 
-    yield
-
-    await http_client.aclose()
+    try:
+        yield
+    finally:
+        await http_client.aclose()
 
 
 app = FastAPI(
@@ -34,7 +38,7 @@ app = FastAPI(
 @app.exception_handler(httpx.TimeoutException)
 async def handle_timeout(
     _request: Request,
-    exc: httpx.TimeoutException,
+    _exc: httpx.TimeoutException,
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_504_GATEWAY_TIMEOUT,
@@ -43,8 +47,8 @@ async def handle_timeout(
 
 @app.exception_handler(httpx.RequestError)
 async def handle_service_unavailable(
-    request: Request,
-    exc: httpx.RequestError,
+    _request: Request,
+    _exc: httpx.RequestError,
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -53,7 +57,7 @@ async def handle_service_unavailable(
 
 
 @app.exception_handler(PermissionDeniedError)
-async def handle_timeout(
+async def handle_permission_denied(
     _request: Request,
     exc: PermissionDeniedError,
 ) -> JSONResponse:
@@ -64,8 +68,8 @@ async def handle_timeout(
     )
 
 @app.exception_handler(InvalidAccessTokenError)
-async def handle_service_unavailable(
-    request: Request,
+async def handle_invalid_access_token(
+    _request: Request,
     exc: InvalidAccessTokenError,
 ) -> JSONResponse:
     return JSONResponse(
@@ -79,5 +83,8 @@ api_router.include_router(health_router)
 api_router.include_router(catalog_router)
 api_router.include_router(auth_router)
 api_router.include_router(admin_catalog_router)
+api_router.include_router(order_router)
+api_router.include_router(admin_order_router)
+api_router.include_router(analytic_router)
 
 app.include_router(api_router)

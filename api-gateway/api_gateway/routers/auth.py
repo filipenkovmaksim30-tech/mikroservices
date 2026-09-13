@@ -1,16 +1,14 @@
 
-from fastapi import APIRouter, Request, status
+from fastapi import APIRouter, Request, Response, status
 
-from api_gateway.schemas.auth import UserRegisterRequest
+from api_gateway.api_clients.http import build_gateway_response, request_upstream
 from api_gateway.routers.dependencies import (
-    CurrentPrincipalDependency, 
-    SettingsDependency, 
-    HttpClientDependency, 
+    AuthorizationHeadersDependency,
+    HttpClientDependency,
     LoginFormDependency,
-    CredentialsDependency
+    SettingsDependency,
 )
-from api_gateway.api_clients.http import request_upstream, build_gateway_response
-
+from api_gateway.schemas.auth import UserRegisterRequest
 
 router = APIRouter(tags=["Auth"], prefix="/auth")
 
@@ -24,7 +22,7 @@ async def register_user(
     payload: UserRegisterRequest,
     client: HttpClientDependency,
     settings: SettingsDependency
-):
+) -> Response:
     url = f"{settings.auth_base_url.rstrip("/")}/auth/register"
     json_body = payload.model_dump(mode="json")
 
@@ -47,7 +45,7 @@ async def login_user(
     form: LoginFormDependency,
     client: HttpClientDependency,
     settings: SettingsDependency
-):
+) -> Response:
     url = f"{settings.auth_base_url.rstrip("/")}/auth/token"
     form_data = {
         "username": form.username,
@@ -72,7 +70,7 @@ async def refresh(
     request: Request,
     client: HttpClientDependency,
     settings: SettingsDependency,
-):  
+) -> Response:
     url = f"{settings.auth_base_url.rstrip("/")}/auth/refresh"
     refresh_token = request.cookies.get(settings.refresh_cookie_name)
     cookies = (
@@ -98,7 +96,7 @@ async def logout(
     request: Request,
     client: HttpClientDependency,
     settings: SettingsDependency
-):
+) -> Response:
     url = f"{settings.auth_base_url.rstrip("/")}/auth/logout"
     refresh_token = request.cookies.get(settings.refresh_cookie_name)
 
@@ -123,19 +121,17 @@ async def logout(
     summary="Получить текущего пользователя",
 )
 async def get_user(
-    _principal: CurrentPrincipalDependency,
-    credentials: CredentialsDependency,
+    authorization_headers: AuthorizationHeadersDependency,
     client: HttpClientDependency,
     settings: SettingsDependency
-):
+) -> Response:
     url = f"{settings.auth_base_url.rstrip("/")}/users/me"
-    headers = {"Authorization": f"Bearer {credentials.credentials}",}
 
     upstream_response = await request_upstream(
         client=client,
         url=url,
         method="GET",
-        headers=headers,
+        headers=authorization_headers,
     )
 
     return build_gateway_response(upstream_response)

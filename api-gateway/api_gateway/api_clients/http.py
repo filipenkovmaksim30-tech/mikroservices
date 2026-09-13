@@ -1,8 +1,16 @@
 import httpx
-
 from fastapi import Response
 
 from api_gateway.config import Settings
+
+FORWARDED_RESPONSE_HEADERS = (
+    "content-type",
+    "www-authenticate",
+    "retry-after",
+    "location",
+    "cache-control",
+    "x-request-id",
+)
 
 def create_http_client(settings: Settings) -> httpx.AsyncClient:
     timeout = httpx.Timeout(
@@ -50,12 +58,16 @@ def build_gateway_response(
     upstream_response: httpx.Response
 ) -> Response:
 
-    content_type = upstream_response.headers.get("content-type")
+    headers = {
+        name: value
+        for name in FORWARDED_RESPONSE_HEADERS
+        if (value := upstream_response.headers.get(name)) is not None
+    }
 
     response = Response(
         content=upstream_response.content,
         status_code=upstream_response.status_code,
-        headers={"content-type": content_type} if content_type else None,
+        headers=headers,
     )
 
     for cookie in upstream_response.headers.get_list("set-cookie"):
