@@ -127,8 +127,8 @@ services:
   order-api:
     <<: *order-service
     command: ["python", "-m", "uvicorn", "messaging_lab.api:app", "--host", "0.0.0.0", "--port", "8000"]
-    ports:
-      - "127.0.0.1:8000:8000"
+    expose:
+      - 8000
     volumes:
       - ./auth-service/secrets/jwt_public.pem:/run/secrets/auth_jwt_public.pem:ro
     depends_on:
@@ -137,8 +137,8 @@ services:
   analytics-api:
     <<: *analytics-service
     command: ["python", "-m", "uvicorn", "analytics_service.api:app", "--host", "0.0.0.0", "--port", "8000"]
-    ports:
-      - "127.0.0.1:8001:8000"
+    expose:
+      - 8000
     volumes:
       - ./auth-service/secrets/jwt_public.pem:/run/secrets/auth_jwt_public.pem:ro
     depends_on:
@@ -148,8 +148,8 @@ services:
   catalog-api:
     <<: *catalog-service
     command: ["python", "-m", "uvicorn", "catalog_service.api:app", "--host", "0.0.0.0", "--port", "8000"]
-    ports:
-      - "127.0.0.1:8002:8000"
+    expose:
+      - 8000
     volumes:
       - ./auth-service/secrets/jwt_public.pem:/run/secrets/auth_jwt_public.pem:ro
     depends_on:
@@ -159,8 +159,8 @@ services:
   auth-api:
     <<: *auth-service
     command: ["python", "-m", "uvicorn", "auth_service.api:app", "--host", "0.0.0.0", "--port", "8000"]
-    ports:
-      - "127.0.0.1:8004:8000"
+    expose:
+      - 8000
     depends_on:
       auth-migrations:
         condition: service_completed_successfully
@@ -168,8 +168,8 @@ services:
   api-gateway:
     <<: *api-gateway
     command: ["python", "-m", "uvicorn", "api_gateway.main:app", "--host", "0.0.0.0", "--port", "8000"]
-    ports:
-      - "127.0.0.1:8005:8000"
+    expose:
+      - 8000
     volumes:
       - ./auth-service/secrets/jwt_public.pem:/run/secrets/auth_jwt_public.pem:ro
   
@@ -458,6 +458,16 @@ services:
           --partitions "${KAFKA_ANALYTICS_DLQ_PARTITIONS}" \
           --replication-factor 1
     restart: "no"
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "127.0.0.1:8088:80"
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api-gateway
+    restart: unless-stopped
 
 volumes:
   rabbitmq_data:

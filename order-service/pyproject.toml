@@ -17,6 +17,7 @@ dependencies = [
     "uvicorn[standard]>=0.35,<1",
     "pyjwt[crypto]>=2.13.0",
     "httpx>=0.28.1",
+    "slowapi>=0.1.10",
 ]
 
 [dependency-groups]

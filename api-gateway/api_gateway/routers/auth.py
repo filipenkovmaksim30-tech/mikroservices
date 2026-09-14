@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request, Response, status
 from api_gateway.api_clients.http import build_gateway_response, request_upstream
 from api_gateway.routers.dependencies import (
     AuthorizationHeadersDependency,
+    ForwardedHeadersDependency,
     HttpClientDependency,
     LoginFormDependency,
     SettingsDependency,
@@ -19,6 +20,7 @@ router = APIRouter(tags=["Auth"], prefix="/auth")
     summary="Регистарция пользователя"
 )
 async def register_user(
+    forwarded_headers: ForwardedHeadersDependency,
     payload: UserRegisterRequest,
     client: HttpClientDependency,
     settings: SettingsDependency
@@ -31,6 +33,7 @@ async def register_user(
         method="POST",
         url=url,
         json_body=json_body,
+        headers=forwarded_headers,
     )
 
     return build_gateway_response(upstream_response)
@@ -42,6 +45,7 @@ async def register_user(
     summary="Создание токена и аутенфикация"
 )
 async def login_user(
+    forwarded_headers: ForwardedHeadersDependency,
     form: LoginFormDependency,
     client: HttpClientDependency,
     settings: SettingsDependency
@@ -57,6 +61,7 @@ async def login_user(
         method="POST",
         url=url,
         form_data=form_data,
+        headers=forwarded_headers,
     )
 
     return build_gateway_response(upstream_response)
@@ -68,6 +73,7 @@ async def login_user(
 )
 async def refresh(
     request: Request,
+    forwarded_headers: ForwardedHeadersDependency,
     client: HttpClientDependency,
     settings: SettingsDependency,
 ) -> Response:
@@ -83,6 +89,7 @@ async def refresh(
         method="POST",
         url=url,
         cookies=cookies,
+        headers=forwarded_headers
     )
 
     return build_gateway_response(upstream_response)
@@ -94,6 +101,7 @@ async def refresh(
 )
 async def logout(
     request: Request,
+    forwarded_headers: ForwardedHeadersDependency,
     client: HttpClientDependency,
     settings: SettingsDependency
 ) -> Response:
@@ -111,6 +119,7 @@ async def logout(
         method="POST",
         url=url,
         cookies=cookies,
+        headers=forwarded_headers,
     )
 
     return build_gateway_response(upstream_response)

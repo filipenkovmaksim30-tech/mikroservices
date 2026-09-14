@@ -14,8 +14,7 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    # Required values come from the environment, which mypy cannot infer.
-    return Settings()  # type: ignore[call-arg]
+    return Settings()
 
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
 
@@ -65,6 +64,25 @@ def get_authorization_headers(
 AuthorizationHeadersDependency = Annotated[
     dict[str, str],
     Depends(get_authorization_headers),
+]
+
+def get_forwarded_headers(request: Request) -> dict[str, str]:
+    header_names = (
+        "x-real-ip",
+        "x-forwarded-for",
+        "x-forwarded-proto",
+        "x-request-id",
+    )
+
+    return {
+        name: value
+        for name in header_names
+        if (value := request.headers.get(name)) is not None
+    }
+
+ForwardedHeadersDependency = Annotated[
+    dict[str, str],
+    Depends(get_forwarded_headers),
 ]
 
 def require_admin(

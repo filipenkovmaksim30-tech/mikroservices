@@ -7,6 +7,7 @@ from api_gateway.routers.dependencies import (
     AuthorizationHeadersDependency,
     HttpClientDependency,
     SettingsDependency,
+    ForwardedHeadersDependency
 )
 from api_gateway.schemas.orders import OrderCreate, OrderRead
 
@@ -24,6 +25,7 @@ router = APIRouter(tags=["Orders"], prefix="/orders")
 )
 async def create_order(
     authorization_headers: AuthorizationHeadersDependency,
+    forwarded_headers: ForwardedHeadersDependency,
     payload: OrderCreate,
     client: HttpClientDependency,
     settings: SettingsDependency,
@@ -35,7 +37,10 @@ async def create_order(
         method="POST",
         url=url,
         json_body=payload.model_dump(mode="json"),
-        headers=authorization_headers,
+        headers={
+            **authorization_headers,
+            **forwarded_headers,
+        }
     )
 
     return build_gateway_response(upstream_response)
@@ -64,5 +69,6 @@ async def get_my_orders(
             "offset": offset,
         },
         headers=authorization_headers,
+            
     )
     return build_gateway_response(upstream_response)

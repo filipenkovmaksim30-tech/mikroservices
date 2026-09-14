@@ -15,6 +15,10 @@ from messaging_lab.exceptions import (
     InvalidCatalogResponseError,
     CatalogUnavailableError
 )
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+from messaging_lab.routers.orders import limiter
 from messaging_lab.routers.orders import router as orders_router
 from messaging_lab.routers.admin_orders import router as admin_orders_router
 
@@ -46,6 +50,8 @@ app = FastAPI(
     version="0.1.0",
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.exception_handler(OrderNotFoundError)
 async def handle_order_not_found(

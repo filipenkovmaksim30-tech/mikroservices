@@ -1,6 +1,8 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from messaging_lab.db.models.order import Order
 from messaging_lab.schemas.order import OrderCreate, OrderRead
@@ -12,13 +14,24 @@ router = APIRouter(tags=["Orders"], prefix="/orders")
 LimitQuery = Annotated[int, Query(ge=1, le=100)]
 OffsetQuery = Annotated[int, Query(ge=0)]
 
+
+def get_client_address(request: Request) -> str:
+    real_ip = request.headers.get("x-real-ip")
+    if real_ip is not None:
+        return real_ip
+    return get_remote_address(request)
+
+limiter = Limiter(key_func=get_client_address, storage_uri="memory://")
+
 @router.post(
     "",
     response_model=OrderRead,
     status_code=status.HTTP_201_CREATED,
     summary="Создать новый заказ",
 )
+@limiter.limit("3/minute")
 async def create_order(
+    request: Request,
     data: OrderCreate,
     current_customer: CurrentPrincipalDependency,
     service: OrderServiceDependency,
