@@ -115,7 +115,55 @@ class StockReservationFailedEnvelopeV1(ContractModel):
             raise ValueError("correlation_id must match payload.order_id")
         return self
 
+class StockReservationConfirmRequestedV1(ContractModel):
+    order_id: UUID
+
+class StockReservationConfirmRequestedEnvelopeV1(ContractModel):
+    event_id: UUID
+    event_type: Literal["stock.reservation.confirm.requested"] = "stock.reservation.confirm.requested"
+    event_version: Literal[1] = 1
+    occurred_at: datetime
+    correlation_id: UUID
+    payload: StockReservationConfirmRequestedV1
+    
+    @field_validator("occurred_at")
+    @classmethod
+    def validate_occurred_at(cls, value: datetime) -> datetime:
+        return require_timezone_and_normalize_to_utc(value)
+    
+    @model_validator(mode="after")
+    def validate_correlation_id(self) -> Self:
+        if self.correlation_id != self.payload.order_id:
+            raise ValueError("correlation_id must match payload.order_id")
+        return self
+    
+class StockReservationReleaseRequestedV1(ContractModel):
+    order_id: UUID
+
+class StockReservationReleaseRequestedEnvelopeV1(ContractModel):
+    event_id: UUID
+    event_type: Literal["stock.reservation.release.requested"] = "stock.reservation.release.requested"
+    event_version: Literal[1] = 1
+    occurred_at: datetime
+    correlation_id: UUID
+    payload: StockReservationReleaseRequestedV1
+    
+    @field_validator("occurred_at")
+    @classmethod
+    def validate_occurred_at(cls, value: datetime) -> datetime:
+        return require_timezone_and_normalize_to_utc(value)
+    
+    @model_validator(mode="after")
+    def validate_correlation_id(self) -> Self:
+        if self.correlation_id != self.payload.order_id:
+            raise ValueError("correlation_id must match payload.order_id")
+        return self
 
 type StockReservationResultEnvelopeV1 = (
     StockReservedEnvelopeV1 | StockReservationFailedEnvelopeV1
+)
+
+type StockReservationFinalizationEnvelopeV1 = (
+    StockReservationConfirmRequestedEnvelopeV1 |
+    StockReservationReleaseRequestedEnvelopeV1
 )

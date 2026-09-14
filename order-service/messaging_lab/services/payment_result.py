@@ -1,5 +1,7 @@
 
 
+from uuid import UUID
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from messaging_lab.db.models.order import OrderStatus
@@ -13,7 +15,13 @@ from messaging_lab.messaging.contracts.payments import (
     PaymentResultEnvelope,
     PaymentSucceededEnvelope,
 )
+from messaging_lab.messaging.contracts.stock_reservations import (
+    StockReservationConfirmRequestedV1, 
+    StockReservationReleaseRequestedV1,
+)
+from messaging_lab.db.models.rabbitmq_outbox import RabbitMQOutboxEvent
 from messaging_lab.repositories.inbox import InboxRepository
+from messaging_lab.repositories.rabbitmq_outbox import RabbitMQOutboxRepository
 from messaging_lab.repositories.orders import OrderRepository
 
 
@@ -22,13 +30,37 @@ class PaymentResultService:
         self,
         session: AsyncSession,
         inbox_repository: InboxRepository,
+        outbox_repository: RabbitMQOutboxRepository,
         order_repository: OrderRepository,
         consumer_name: str,
     ) -> None:
         self._session = session
         self._inbox_repository = inbox_repository
+        self._outbox_repository = outbox_repository
         self._order_repository = order_repository
         self._consumer_name = consumer_name
+
+    def _build_confirm_event(self, order_id: UUID) -> RabbitMQOutboxEvent:
+
+        payload = StockReservationConfirmRequestedV1(order_id=order_id)
+
+        return RabbitMQOutboxEvent(
+            aggregate_id=order_id,
+            event_type="stock.reservation.confirm.requested",
+            event_version=1,
+            payload=payload.model_dump(mode="json"),
+        )
+
+    def _build_release_event(self, order_id: UUID) -> RabbitMQOutboxEvent:
+
+        payload = StockReservationReleaseRequestedV1(order_id=order_id)
+
+        return RabbitMQOutboxEvent(
+            aggregate_id=order_id,
+            event_type="stock.reservation.release.requested",
+            event_version=1,
+            payload=payload.model_dump(mode="json"),
+        )
 
     async def process(self, event: PaymentResultEnvelope) -> bool:
         async with self._session.begin():
@@ -64,6 +96,8 @@ class PaymentResultService:
                     )
 
                 await self._order_repository.mark_paid(order=order)
+                confirm_event = self._build_confirm_event(order.id)
+                await self._outbox_repository.add(confirm_event)
 
             elif isinstance(event, PaymentFailedEnvelope):
                 if order.status is OrderStatus.PAYMENT_FAILED:
@@ -77,5 +111,7 @@ class PaymentResultService:
                     )
 
                 await self._order_repository.mark_payment_failed(order=order)
-
+                release_event = self._build_release_event(order.id)
+                await self._outbox_repository.add(release_event)
+                
             return True
