@@ -263,6 +263,16 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  catalog-finalization-consumer:
+    <<: *catalog-service
+    command: ["python", "-m", "catalog_service.workers.reservation_finalization"]
+    depends_on:
+      catalog-migrations:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    restart: unless-stopped
+
   analytics-consumer:
     <<: *analytics-service
     command: ["python", "-m", "analytics_service.workers.kafka_consumer"]

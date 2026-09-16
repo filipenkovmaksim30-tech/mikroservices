@@ -14,6 +14,10 @@ from messaging_lab.messaging.contracts.payments import (
 from messaging_lab.messaging.contracts.stock_reservations import (
     StockReservationRequestedEnvelopeV1,
     StockReservationRequestedV1,
+    StockReservationConfirmRequestedV1,
+    StockReservationConfirmRequestedEnvelopeV1,
+    StockReservationReleaseRequestedV1,
+    StockReservationReleaseRequestedEnvelopeV1,
 )
 from messaging_lab.messaging.rabbitmq.publisher import publish_message
 from messaging_lab.repositories.rabbitmq_outbox import RabbitMQOutboxRepository
@@ -60,6 +64,30 @@ class RabbitMQOutboxPublisher:
                     occurred_at=event.occurred_at,
                     correlation_id=event.aggregate_id,
                     payload=payload,
+                )
+                return envelope.model_dump_json().encode("utf-8")
+
+            case "stock.reservation.confirm.requested":
+                payload = StockReservationConfirmRequestedV1.model_validate(event.payload)
+                envelope = StockReservationConfirmRequestedEnvelopeV1(
+                    event_id=event.event_id,
+                    event_type=event.event_type,
+                    event_version=event.event_version,
+                    occurred_at=event.occurred_at,
+                    correlation_id=event.aggregate_id,
+                    payload=payload
+                )
+                return envelope.model_dump_json().encode("utf-8")
+
+            case "stock.reservation.release.requested":
+                payload = StockReservationReleaseRequestedV1.model_validate(event.payload)
+                envelope = StockReservationReleaseRequestedEnvelopeV1(
+                    event_id=event.event_id,
+                    event_type=event.event_type,
+                    event_version=event.event_version,
+                    occurred_at=event.occurred_at,
+                    correlation_id=event.aggregate_id,
+                    payload=payload
                 )
                 return envelope.model_dump_json().encode("utf-8")
 

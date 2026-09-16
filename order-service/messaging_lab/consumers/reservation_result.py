@@ -67,6 +67,10 @@ async def handler_stock_reservation_result(
         event = STOCK_RESERVATION_ADAPTER.validate_json(message.body)
 
     except ValidationError:
+        logger.exception(
+            "Permanent validation reservation result error: message_id=%s",
+            message.message_id,
+        )
         await message.reject(requeue=False)
         return
     

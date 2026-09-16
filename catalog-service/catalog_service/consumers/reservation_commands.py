@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from catalog_service.messaging.contracts.stock_reservations import (
     StockReservationRequestedEnvelopeV1,
 )
-from catalog_service.messaging.rabbitmq.publisher import publish_message
+
 from catalog_service.messaging.rabbitmq.topology.reservation_commands import (
     RESERVATION_REQUEST_RETRY_ROUTING_KEY,
 )
@@ -17,46 +17,9 @@ from catalog_service.repositories.outbox import RabbitMQOutboxRepository
 from catalog_service.repositories.products import ProductRepository
 from catalog_service.repositories.reservation import StockReservationRepository
 from catalog_service.services.reservation import StockReservationService
+from catalog_service.consumers.retry_or_send_to_dlq import retry_or_send_to_dlq
 
 logger = logging.getLogger(__name__)
-
-MAX_RETRY_ATTEMPTS = 3
-
-
-async def retry_or_send_to_dlq(
-    message: AbstractIncomingMessage,
-    retry_exchange: AbstractExchange,
-    retry_routing_key: str,
-    event_id: str,
-    correlation_id: str,
-) -> None:
-    raw_retry_count = (
-        message.headers.get("x-retry-count", 0)
-        if message.headers
-        else 0
-    )
-    retry_count = int(raw_retry_count)
-
-    if retry_count >= MAX_RETRY_ATTEMPTS:
-        logger.error(
-            "Retry attempts exhausted: message_id=%s retry_count=%s",
-            message.message_id,
-            retry_count,
-        )
-        await message.reject(requeue=False)
-        return
-
-    next_retry_count = retry_count + 1
-
-    await publish_message(
-        exchange=retry_exchange,
-        routing_key=retry_routing_key,
-        body=message.body,
-        message_id=event_id,
-        correlation_id=correlation_id,
-        headers={"x-retry-count": next_retry_count},
-    )
-    await message.ack()
 
 
 async def handle_reservation_requested(

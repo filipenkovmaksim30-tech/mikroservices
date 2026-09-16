@@ -10,6 +10,8 @@ from messaging_lab.messaging.rabbitmq.topology.payment_commands import (
 )
 from messaging_lab.messaging.rabbitmq.topology.reservation_commands import (
     RESERVATION_REQUEST_ROUTING_KEY,
+    STOCK_RESERVATION_CONFIRM_REQUESTED_ROUTING_KEY,
+    STOCK_RESERVATION_RELEASE_REQUESTED_ROUTING_KEY,
     declare_reservation_exchange,
 )
 from messaging_lab.workers.rabbitmq_outbox import RabbitMQOutboxWorker
@@ -36,6 +38,8 @@ async def main() -> None:
         exchanges_by_event_type={
             PAYMENT_REQUESTED_ROUTING_KEY: payment_exchange,
             RESERVATION_REQUEST_ROUTING_KEY: reservation_exchange,
+            STOCK_RESERVATION_CONFIRM_REQUESTED_ROUTING_KEY: reservation_exchange,
+            STOCK_RESERVATION_RELEASE_REQUESTED_ROUTING_KEY: reservation_exchange,
         }
 
         worker = RabbitMQOutboxWorker(
