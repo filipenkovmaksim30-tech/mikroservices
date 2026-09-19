@@ -1,25 +1,31 @@
+import logging
+
 from aio_pika.abc import AbstractExchange, AbstractIncomingMessage
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from messaging_lab.messaging.rabbitmq.publisher import publish_message
-from messaging_lab.messaging.rabbitmq.topology.notifications import ORDER_RETRY_ROUTING_KEY
+from messaging_lab.messaging.contracts.notifications import OrderNotificationEnvelopeV1
+from messaging_lab.messaging.rabbitmq.topology.notifications import (
+    ORDER_NOTIFICATIONS_RETRY_ROUTING_KEY,
+)
 from messaging_lab.repositories.inbox import InboxRepository
-from messaging_lab.schemas.event import EventEnvelope, OrderCreatedV1
 from messaging_lab.services.notifications import (
     NotificationService,
     PermanentNotificationError,
     TransientNotificationError,
 )
 
+logger = logging.getLogger(__name__)
 
 MAX_RETRY_ATTEMPTS = 3
-NOTIFICATIONS_CONSUMER = "notifications"
+NOTIFICATIONS_CONSUMER = "order-service.notifications.v1"
+NOTIFICATION_EVENT_ADAPTER = TypeAdapter(OrderNotificationEnvelopeV1)
 
 
 
 async def process_with_inbox(
-    event: EventEnvelope[OrderCreatedV1],
+    event: OrderNotificationEnvelopeV1,
     notification_service: NotificationService,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> bool:
@@ -35,23 +41,23 @@ async def process_with_inbox(
             if not is_new:
                 return False
 
-            await notification_service.process_order_created(event=event)
+            await notification_service.process_notification(event=event)
 
     return True
 
-async def handle_order_created(
+async def handle_notification(
     message: AbstractIncomingMessage,
     retry_exchange: AbstractExchange,
     notification_service: NotificationService,
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     try:
-        event = EventEnvelope[OrderCreatedV1].model_validate_json(message.body)
+        event = NOTIFICATION_EVENT_ADAPTER.validate_json(message.body)
     except ValidationError as exc:
-        print(
-            "Permanent message validation error:",
-            f"message_id={message.message_id}",
-            f"errors={exc.error_count()}",
+        logger.warning(
+            "Permanent notification validation error: message_id=%s errors=%s",
+            message.message_id,
+            exc.error_count(),
         )
 
         await message.reject(requeue=False)
@@ -72,32 +78,25 @@ async def handle_order_created(
         )
 
         if not processed:
-            print(
-                "Duplicate message skipped:",
-                f"event_id={event.event_id}",
-            )
+            logger.info("Duplicate notification skipped: event_id=%s", event.event_id)
         else:
-            print(
-                "Order confirmation sent:",
-                f"event_id={event.event_id}",
-                f"order_id={event.payload.order_id}",
-                f"receipt_email={event.payload.receipt_email}",
+            logger.info(
+                "Notification sent: event_type=%s event_id=%s order_id=%s",
+                event.event_type,
+                event.event_id,
+                event.payload.order_id,
             )
     except PermanentNotificationError as exc:
-        print(
-            "Permanent notification error:",
-            f"event_id={event.event_id}",
-            f"error={exc}",
-        )
+        logger.error("Permanent notification error: event_id=%s error=%s", event.event_id, exc)
         await message.reject(requeue=False)
         return
     except TransientNotificationError as exc:
         if retry_count >= MAX_RETRY_ATTEMPTS:
-            print(
-                "Retry attempts exhausted:",
-                f"event_id={event.event_id}",
-                f"retry_count={retry_count}",
-                f"error={exc}",
+            logger.error(
+                "Notification retries exhausted: event_id=%s retry_count=%s error=%s",
+                event.event_id,
+                retry_count,
+                exc,
             )
 
             await message.reject(requeue=False)
@@ -107,7 +106,7 @@ async def handle_order_created(
 
         await publish_message(
             exchange=retry_exchange,
-            routing_key=ORDER_RETRY_ROUTING_KEY,
+            routing_key=ORDER_NOTIFICATIONS_RETRY_ROUTING_KEY,
             body=message.body,
             message_id=str(event.event_id),
             correlation_id=str(event.correlation_id),
@@ -118,10 +117,10 @@ async def handle_order_created(
 
         await message.ack()
 
-        print(
-            "Message scheduled for retry:",
-            f"event_id={event.event_id}",
-            f"retry_count={next_retry_count}",
+        logger.info(
+            "Notification scheduled for retry: event_id=%s retry_count=%s",
+            event.event_id,
+            next_retry_count,
         )
         return
 

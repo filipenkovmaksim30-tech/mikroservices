@@ -14,6 +14,11 @@ from messaging_lab.messaging.rabbitmq.topology.reservation_commands import (
     STOCK_RESERVATION_RELEASE_REQUESTED_ROUTING_KEY,
     declare_reservation_exchange,
 )
+from messaging_lab.messaging.rabbitmq.topology.notifications import (
+    declare_order_events_exchange,
+    ORDER_PAID_NOTIFICATION_ROUTING_KEY,
+    ORDER_FAILED_NOTIFICATION_ROUTING_KEY,
+)
 from messaging_lab.workers.rabbitmq_outbox import RabbitMQOutboxWorker
 
 logger = logging.getLogger(__name__)
@@ -33,6 +38,8 @@ async def main() -> None:
         channel = await create_channel(connection)
         reservation_exchange = await declare_reservation_exchange(channel)
         payment_exchange = await declare_payment_commands_exchange(channel)
+        notifications_exchange = await declare_order_events_exchange(channel)
+
         logger.info("RabbitMQ topology declared; outbox worker is running")
 
         exchanges_by_event_type={
@@ -40,6 +47,8 @@ async def main() -> None:
             RESERVATION_REQUEST_ROUTING_KEY: reservation_exchange,
             STOCK_RESERVATION_CONFIRM_REQUESTED_ROUTING_KEY: reservation_exchange,
             STOCK_RESERVATION_RELEASE_REQUESTED_ROUTING_KEY: reservation_exchange,
+            ORDER_PAID_NOTIFICATION_ROUTING_KEY: notifications_exchange,
+            ORDER_FAILED_NOTIFICATION_ROUTING_KEY: notifications_exchange,
         }
 
         worker = RabbitMQOutboxWorker(

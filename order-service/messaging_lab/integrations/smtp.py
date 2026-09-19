@@ -16,7 +16,11 @@ from messaging_lab.services.notifications import (
     PermanentNotificationError,
     TransientNotificationError,
 )
-from messaging_lab.schemas.event import EventEnvelope, OrderCreatedV1
+from messaging_lab.messaging.contracts.notifications import (
+    OrderNotificationEnvelopeV1,
+    OrderPaidEnvelopeV1,
+    OrderPaymentFailedEnvelopeV1,
+)
 
 
 class GmailSmtpNotificationProvider:
@@ -42,32 +46,57 @@ class GmailSmtpNotificationProvider:
         self._use_tls = use_tls
         self._timeout_seconds = timeout_seconds
 
-    def _build_order_created_message(
+    def _build_order_paid_message(
         self,
-        event: EventEnvelope[OrderCreatedV1],
+        event: OrderPaidEnvelopeV1,
         idempotency_key: str,
     ) -> EmailMessage:
         message = EmailMessage()
         message["From"] = self._sender_email
         message["To"] = str(event.payload.receipt_email)
-        message["Subject"] = f"Заказ {event.payload.order_id} создан"
+        message["Subject"] = f"Оплата заказа {event.payload.order_id} подтверждена"
         message["X-Idempotency-Key"] = idempotency_key
         message.set_content(
-            f"Ваш заказ {event.payload.order_id} создан.\n"
-            f"Сумма: {event.payload.total_amount}.\n"
-            f"Количество позиций: {len(event.payload.items)}.\n"
+            "Здравствуйте!\n"
+            f"Оплата заказа {event.payload.order_id} прошла успешно.\n"
+            f"Сумма заказа: {event.payload.total_amount} {event.payload.currency}.\n"
+            "Спасибо, что выбираете M-Shop."
         )
         return message
 
-    async def send_order_created(
+    def _build_order_payment_failed_message(
         self,
-        event: EventEnvelope[OrderCreatedV1],
+        event: OrderPaymentFailedEnvelopeV1,
+        idempotency_key: str,
+    ) -> EmailMessage:
+        message = EmailMessage()
+        message["From"] = self._sender_email
+        message["To"] = str(event.payload.receipt_email)
+        message["Subject"] = f"Оплата заказа {event.payload.order_id} не прошла"
+        message["X-Idempotency-Key"] = idempotency_key
+        message.set_content(
+            "Здравствуйте!\n"
+            f"Оплата заказа {event.payload.order_id} не прошла.\n"
+            f"Сумма заказа: {event.payload.total_amount} {event.payload.currency}.\n"
+            "Если нужна помощь, свяжитесь с поддержкой M-Shop."
+        )
+        return message
+
+    async def send_order_notifications(
+        self,
+        event: OrderNotificationEnvelopeV1,
         idempotency_key: str,
     ) -> None:
-        message = self._build_order_created_message(
-            event=event,
-            idempotency_key=idempotency_key,
-        )
+        if isinstance(event, OrderPaidEnvelopeV1):
+            message = self._build_order_paid_message(
+                event=event,
+                idempotency_key=idempotency_key,
+            )
+        else:
+            message = self._build_order_payment_failed_message(
+                event=event,
+                idempotency_key=idempotency_key,
+            )
         try:
             await aiosmtplib.send(
                 message,
