@@ -13,6 +13,7 @@ from messaging_lab.messaging.rabbitmq.topology.payment_result import (
 )
 from messaging_lab.repositories.inbox import InboxRepository
 from messaging_lab.repositories.rabbitmq_outbox import RabbitMQOutboxRepository
+from messaging_lab.repositories.kafka_outbox import KafkaOutboxRepository
 from messaging_lab.repositories.orders import OrderRepository
 from messaging_lab.services.payment_result import PaymentResultService
 
@@ -77,11 +78,13 @@ async def handler_payment_result(
         async with session_factory() as session:
             inbox_repository = InboxRepository(session)
             outbox_repository = RabbitMQOutboxRepository(session)
+            kafka_outbox_repository = KafkaOutboxRepository(session)
             order_repository = OrderRepository(session)
             service = PaymentResultService(
                 session=session,
                 inbox_repository=inbox_repository,
                 outbox_repository=outbox_repository,
+                kafka_outbox_repository=kafka_outbox_repository,
                 order_repository=order_repository,
                 consumer_name=consumer_name,
             )

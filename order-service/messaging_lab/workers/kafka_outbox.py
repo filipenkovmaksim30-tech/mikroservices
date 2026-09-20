@@ -8,6 +8,10 @@ from messaging_lab.db.models.kafka_outbox import KafkaOutboxEvent
 from messaging_lab.messaging.contracts.analytics import (
     AnalyticsEventEnvelope,
     OrderCreatedAnalyticsV1,
+    AnalyticsOrderPaidV1,
+    AnalyticsOrderPaidEnvelopeV1,
+    AnalyticsOrderPaymentFailedV1,
+    AnalyticsOrderPaymentFailedEnvelopeV1,
 )
 from messaging_lab.messaging.kafka import KafkaEventProducer
 from messaging_lab.repositories.kafka_outbox import KafkaOutboxRepository
@@ -33,16 +37,45 @@ class KafkaOutboxPublisher:
         self._batch_size = batch_size
 
     def _serialize_event(self, event: KafkaOutboxEvent) -> bytes:
-        payload = OrderCreatedAnalyticsV1.model_validate(event.payload)
-        envelope = AnalyticsEventEnvelope[OrderCreatedAnalyticsV1](
-            event_id=event.event_id,
-            event_type=event.event_type,
-            event_version=event.event_version,
-            occurred_at=event.occurred_at,
-            correlation_id=event.aggregate_id,
-            payload=payload,
-        )
-        return envelope.model_dump_json().encode("utf-8")
+        match event.event_type:
+            case "order.created":
+                payload = OrderCreatedAnalyticsV1.model_validate(event.payload)
+                envelope = AnalyticsEventEnvelope[OrderCreatedAnalyticsV1](
+                    event_id=event.event_id,
+                    event_type=event.event_type,
+                    event_version=event.event_version,
+                    occurred_at=event.occurred_at,
+                    correlation_id=event.aggregate_id,
+                    payload=payload,
+                )
+                return envelope.model_dump_json().encode("utf-8")
+            case "order.paid":
+                payload = AnalyticsOrderPaidV1.model_validate(event.payload)
+                envelope = AnalyticsOrderPaidEnvelopeV1(
+                    event_id=event.event_id,
+                    event_type=event.event_type,
+                    event_version=event.event_version,
+                    occurred_at=event.occurred_at,
+                    correlation_id=event.aggregate_id,
+                    payload=payload
+                )
+                return envelope.model_dump_json().encode("utf-8")
+
+            case "order.payment_failed":
+                payload = AnalyticsOrderPaymentFailedV1.model_validate(event.payload)
+                envelope = AnalyticsOrderPaymentFailedEnvelopeV1(
+                    event_id=event.event_id,
+                    event_type=event.event_type,
+                    event_version=event.event_version,
+                    occurred_at=event.occurred_at,
+                    correlation_id=event.aggregate_id,
+                    payload=payload
+                )
+                return envelope.model_dump_json().encode("utf-8")
+            case unsupported_event_type:
+                raise ValueError(
+                    f"Unsupported Kafka outbox event type: {unsupported_event_type}"
+                )
 
     async def publish_batch(self) -> int:
         async with self._session.begin():

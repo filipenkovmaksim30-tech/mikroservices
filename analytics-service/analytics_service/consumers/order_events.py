@@ -1,11 +1,11 @@
 from aiokafka import AIOKafkaProducer
 from aiokafka.structs import ConsumerRecord
 
-from pydantic import ValidationError
+from pydantic import TypeAdapter, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from analytics_service.messaging.contract import (
     AnalyticsEventEnvelope,
-    OrderCreatedAnalyticsV1,
+    AnalyticsOrderEnvelope,
 )
 
 from analytics_service.db.session import async_session_factory
@@ -13,9 +13,10 @@ from analytics_service.config import Settings
 from analytics_service.repositories.analytics_order import AnalyticsOrderRepository
 from analytics_service.repositories.processed_event import ProcessedEventRepository
 from analytics_service.services.order_created import OrderCreatedAnalyticsService
+from analytics_service.services.order_payment import AnalyticPaymentService
 from analytics_service.messaging.kafka_dlq import publish_to_dlq
 
-
+ANALYTICS_ORDER_ADAPTER = TypeAdapter(AnalyticsOrderEnvelope)
 
 
 async def process_message(
@@ -23,20 +24,30 @@ async def process_message(
     session_factory: async_sessionmaker[AsyncSession],
     consumer_name: str,
 ) -> bool:
-    event = AnalyticsEventEnvelope[OrderCreatedAnalyticsV1].model_validate_json(message.value)
+    event = ANALYTICS_ORDER_ADAPTER.validate_json(message.value)
 
     async with session_factory() as session:
         analytics_order_repository = AnalyticsOrderRepository(session)
         processed_event_repository = ProcessedEventRepository(session)
 
-        analytics_service = OrderCreatedAnalyticsService(
-            session=session,
-            analytics_order_repository=analytics_order_repository,
-            processed_event_repository=processed_event_repository,
-            consumer_name=consumer_name,
-        )
+        if isinstance(event, AnalyticsEventEnvelope):
 
-        return await analytics_service.process(event)
+            analytics_service = OrderCreatedAnalyticsService(
+                session=session,
+                analytics_order_repository=analytics_order_repository,
+                processed_event_repository=processed_event_repository,
+                consumer_name=consumer_name,
+            )
+
+            return await analytics_service.process(event)
+        else:
+            analytics_payment_service = AnalyticPaymentService(
+                session,
+                processed_repository=processed_event_repository,
+                analytics_order_repository=analytics_order_repository,
+                consumer_name=consumer_name
+            )
+            return await analytics_payment_service.process(event)
 
 async def handle_message(
     message: ConsumerRecord,

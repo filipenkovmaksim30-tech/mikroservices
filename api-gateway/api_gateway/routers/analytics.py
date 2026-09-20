@@ -21,7 +21,7 @@ router = APIRouter(
 @router.get(
     "/summary",
     response_model=AnalyticsSummaryResponse,
-    summary="Получить выручку за период",
+    summary="Сводка по заказам, созданным за период",
     status_code=status.HTTP_200_OK,
 )
 async def get_summary(
@@ -50,7 +50,7 @@ async def get_summary(
 @router.get(
     "/summary-by-day",
     response_model=list[DailySummaryResponse],
-    summary="Получить выручку по дням за период",
+    summary="Сводка по UTC-дням создания заказов",
     status_code=status.HTTP_200_OK,
 )
 async def get_daily_summary(

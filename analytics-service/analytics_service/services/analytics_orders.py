@@ -32,6 +32,8 @@ class AnalyticsOrderService:
         async with self._session.begin():
             (
                 orders_count,
+                paid_orders_count,
+                payment_failed_count,
                 revenue,
                 average_order_value,
                 items_quantity,
@@ -39,6 +41,8 @@ class AnalyticsOrderService:
 
         return AnalyticsSummaryResponse(
             orders_count=orders_count,
+            paid_orders_count=paid_orders_count,
+            payment_failed_count=payment_failed_count,
             revenue=revenue,
             average_order_value=average_order_value,
             items_quantity=items_quantity,
@@ -61,6 +65,8 @@ class AnalyticsOrderService:
             DailySummaryResponse(
                 day=day,
                 orders_count=orders_count,
+                paid_orders_count=paid_orders_count,
+                payment_failed_count=payment_failed_count,
                 revenue=revenue,
                 average_order_value=average_order_value,
                 items_quantity=items_quantity,
@@ -68,6 +74,8 @@ class AnalyticsOrderService:
             for (
                 day,
                 orders_count,
+                paid_orders_count,
+                payment_failed_count,
                 revenue,
                 average_order_value,
                 items_quantity,

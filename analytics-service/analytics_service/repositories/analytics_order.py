@@ -28,21 +28,36 @@ class AnalyticsOrderRepository:
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
+    async def get_by_order_id_for_update(self, order_id: UUID) -> AnalyticsOrder | None:
+        statement = (
+            select(AnalyticsOrder)
+            .where(AnalyticsOrder.order_id == order_id)
+            .with_for_update()
+        )
+        result = await self._session.execute(statement)
+        return result.scalar_one_or_none()
+
     async def get_summary(
         self,
         date_from: datetime,
         date_to: datetime,
-    ) -> tuple[int, Decimal, Decimal, int]:
+    ) -> tuple[int, int, int, Decimal, Decimal, int]:
+        paid = AnalyticsOrder.paid_at.is_not(None)
+        payment_failed = AnalyticsOrder.payment_failed_at.is_not(None)
         orders_statement = (
             select(
                 func.count(AnalyticsOrder.order_id).label("orders_count"),
+                func.count(AnalyticsOrder.order_id).filter(paid).label("paid_orders_count"),
+                func.count(AnalyticsOrder.order_id)
+                .filter(payment_failed)
+                .label("payment_failed_count"),
                 func.coalesce(
-                    func.sum(AnalyticsOrder.total_amount),
+                    func.sum(AnalyticsOrder.total_amount).filter(paid),
                     Decimal("0"),
                 ).label("revenue"),
                 func.coalesce(
                     cast(
-                        func.avg(AnalyticsOrder.total_amount),
+                        func.avg(AnalyticsOrder.total_amount).filter(paid),
                         Numeric(precision=18, scale=2),
                     ),
                     Decimal("0"),
@@ -62,12 +77,15 @@ class AnalyticsOrderRepository:
             )
             .where(AnalyticsOrder.created_at >= date_from)
             .where(AnalyticsOrder.created_at < date_to)
+            .where(paid)
         )
         items_result = await self._session.execute(items_statement)
         items_quantity = items_result.scalar_one()
 
         return (
             orders_summary.orders_count,
+            orders_summary.paid_orders_count,
+            orders_summary.payment_failed_count,
             orders_summary.revenue,
             orders_summary.average_order_value,
             items_quantity,
@@ -77,17 +95,29 @@ class AnalyticsOrderRepository:
         self,
         date_from: datetime,
         date_to: datetime,
-    ) -> list[tuple[date, int, Decimal, Decimal, int]]:
+    ) -> list[tuple[date, int, int, int, Decimal, Decimal, int]]:
         day_expression = func.date(func.timezone("UTC", AnalyticsOrder.created_at)).label("day")
+        paid = AnalyticsOrder.paid_at.is_not(None)
+        payment_failed = AnalyticsOrder.payment_failed_at.is_not(None)
 
         orders_statement = (
             select(
                 day_expression,
                 func.count(AnalyticsOrder.order_id).label("orders_count"),
-                func.sum(AnalyticsOrder.total_amount).label("revenue"),
-                cast(
-                    func.avg(AnalyticsOrder.total_amount),
-                    Numeric(precision=18, scale=2),
+                func.count(AnalyticsOrder.order_id).filter(paid).label("paid_orders_count"),
+                func.count(AnalyticsOrder.order_id)
+                .filter(payment_failed)
+                .label("payment_failed_count"),
+                func.coalesce(
+                    func.sum(AnalyticsOrder.total_amount).filter(paid),
+                    Decimal("0"),
+                ).label("revenue"),
+                func.coalesce(
+                    cast(
+                        func.avg(AnalyticsOrder.total_amount).filter(paid),
+                        Numeric(precision=18, scale=2),
+                    ),
+                    Decimal("0"),
                 ).label("average_order_value"),
             )
             .where(AnalyticsOrder.created_at >= date_from)
@@ -109,6 +139,7 @@ class AnalyticsOrderRepository:
             )
             .where(AnalyticsOrder.created_at >= date_from)
             .where(AnalyticsOrder.created_at < date_to)
+            .where(paid)
             .group_by(day_expression)
         )
         items_result = await self._session.execute(items_statement)
@@ -120,6 +151,8 @@ class AnalyticsOrderRepository:
             (
                 row.day,
                 row.orders_count,
+                row.paid_orders_count,
+                row.payment_failed_count,
                 row.revenue,
                 row.average_order_value,
                 items_by_day.get(row.day, 0),

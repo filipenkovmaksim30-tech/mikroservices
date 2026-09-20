@@ -21,6 +21,8 @@ class AnalyticsOrder(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
+    paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    payment_failed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     items: Mapped[list["AnalyticsOrderItem"]] = relationship(
     back_populates="order",
     cascade="all, delete-orphan",
@@ -29,6 +31,10 @@ class AnalyticsOrder(Base):
 
     __table_args__ = (
         CheckConstraint("total_amount >= 0", name="ck_analytics_orders_total_amount_non_negative"),
+        CheckConstraint(
+            "paid_at IS NULL OR payment_failed_at IS NULL",
+            name="ck_analytics_orders_single_payment_result",
+        ),
         Index("ix_analytics_orders_created_at", "created_at"),
         Index(
             "ix_analytics_orders_customer_created_at",

@@ -148,3 +148,6 @@ class AnalyticsOrderPaymentFailedEnvelopeV1(ContractModel):
         if self.correlation_id != self.payload.order_id:
             raise ValueError("correlation_id must match payload.order_id")
         return self
+
+type AnalyticsOrderPaymentEnvelopeV1 = AnalyticsOrderPaidEnvelopeV1 | AnalyticsOrderPaymentFailedEnvelopeV1
+type AnalyticsOrderEnvelope = AnalyticsEventEnvelope[OrderCreatedAnalyticsV1] | AnalyticsOrderPaymentEnvelopeV1

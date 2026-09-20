@@ -19,13 +19,19 @@ from messaging_lab.messaging.contracts.payments import (
     PaymentResultEnvelope,
     PaymentSucceededEnvelope,
 )
+from messaging_lab.messaging.contracts.analytics import (
+    AnalyticsOrderPaidV1, 
+    AnalyticsOrderPaymentFailedV1,
+)
 from messaging_lab.messaging.contracts.stock_reservations import (
     StockReservationConfirmRequestedV1, 
     StockReservationReleaseRequestedV1,
 )
 from messaging_lab.db.models.rabbitmq_outbox import RabbitMQOutboxEvent
+from messaging_lab.db.models.kafka_outbox import KafkaOutboxEvent
 from messaging_lab.repositories.inbox import InboxRepository
 from messaging_lab.repositories.rabbitmq_outbox import RabbitMQOutboxRepository
+from messaging_lab.repositories.kafka_outbox import KafkaOutboxRepository
 from messaging_lab.repositories.orders import OrderRepository
 
 
@@ -35,12 +41,14 @@ class PaymentResultService:
         session: AsyncSession,
         inbox_repository: InboxRepository,
         outbox_repository: RabbitMQOutboxRepository,
+        kafka_outbox_repository: KafkaOutboxRepository,
         order_repository: OrderRepository,
         consumer_name: str,
     ) -> None:
         self._session = session
         self._inbox_repository = inbox_repository
         self._outbox_repository = outbox_repository
+        self._kafka_outbox_repository = kafka_outbox_repository
         self._order_repository = order_repository
         self._consumer_name = consumer_name
 
@@ -88,6 +96,50 @@ class PaymentResultService:
             payload=payload.model_dump(mode="json"),
         )
 
+    def _build_analytics_order_paid_event(
+        self,
+        order_id: UUID,
+        customer_id: UUID,
+        total_amount: Decimal,
+        paid_at: datetime,
+    ) -> KafkaOutboxEvent:
+        
+        payload = AnalyticsOrderPaidV1(
+            order_id=order_id,
+            customer_id=customer_id,
+            total_amount=total_amount,
+            paid_at=paid_at
+        )
+        return KafkaOutboxEvent(
+            aggregate_id=order_id,
+            event_type="order.paid",
+            event_version=1,
+            payload=payload.model_dump(mode="json")
+        )
+
+    def _build_analytics_order_payment_failed_event(
+        self,
+        order_id: UUID,
+        customer_id: UUID,
+        total_amount: Decimal,
+        failed_at: datetime,
+        failure_code: str,
+    ) -> KafkaOutboxEvent:
+            
+        payload = AnalyticsOrderPaymentFailedV1(
+            order_id=order_id,
+            customer_id=customer_id,
+            total_amount=total_amount,
+            failed_at=failed_at,
+            failure_code=failure_code,
+        )
+        return KafkaOutboxEvent(
+            aggregate_id=order_id,
+            event_type="order.payment_failed",
+            event_version=1,
+            payload=payload.model_dump(mode="json")
+        )
+
     def _build_confirm_event(self, order_id: UUID) -> RabbitMQOutboxEvent:
 
         payload = StockReservationConfirmRequestedV1(order_id=order_id)
@@ -109,6 +161,7 @@ class PaymentResultService:
             event_version=1,
             payload=payload.model_dump(mode="json"),
         )
+
 
     async def process(self, event: PaymentResultEnvelope) -> bool:
         async with self._session.begin():
@@ -145,6 +198,12 @@ class PaymentResultService:
 
                 await self._order_repository.mark_paid(order=order)
                 confirm_event = self._build_confirm_event(order.id)
+                analytics_order_paid_event = self._build_analytics_order_paid_event(
+                    order_id=order.id,
+                    customer_id=order.customer_id,
+                    total_amount=order.total_amount,
+                    paid_at=event.payload.completed_at,
+                )
                 notification_paid_event = self._build_paid_notification_event(
                     order_id=order.id,
                     receipt_email=order.receipt_email,
@@ -152,6 +211,7 @@ class PaymentResultService:
                     paid_at=event.payload.completed_at,
                 )
                 await self._outbox_repository.add(confirm_event)
+                await self._kafka_outbox_repository.add(analytics_order_paid_event)
                 await self._outbox_repository.add(notification_paid_event)
 
             elif isinstance(event, PaymentFailedEnvelope):
@@ -167,6 +227,13 @@ class PaymentResultService:
 
                 await self._order_repository.mark_payment_failed(order=order)
                 release_event = self._build_release_event(order.id)
+                analytics_order_payment_failed_event = self._build_analytics_order_payment_failed_event(
+                    order_id=order.id,
+                    customer_id=order.customer_id,
+                    total_amount=order.total_amount,
+                    failed_at=event.payload.completed_at,
+                    failure_code=event.payload.failure_code,
+                )
                 notification_payment_failed_event = self._build_payment_failed_notification_event(
                     order_id=order.id,
                     receipt_email=order.receipt_email,
@@ -175,6 +242,7 @@ class PaymentResultService:
                     failed_at=event.payload.completed_at,
                 )
                 await self._outbox_repository.add(release_event)
+                await self._kafka_outbox_repository.add(analytics_order_payment_failed_event)
                 await self._outbox_repository.add(notification_payment_failed_event)
                 
             return True

@@ -11,7 +11,11 @@ from analytics_service.routers.dependencies import get_analytics_service, requir
 router = APIRouter(tags=["Analytics"], prefix="/analytics", dependencies=[Depends(require_admin)])
 
 
-@router.get("/summary", response_model=AnalyticsSummaryResponse, summary="Получить выручку за период")
+@router.get(
+    "/summary",
+    response_model=AnalyticsSummaryResponse,
+    summary="Сводка по заказам, созданным за период",
+)
 async def get_summary(
     date_from: datetime,
     date_to: datetime,
@@ -21,7 +25,11 @@ async def get_summary(
     return summary
     
 
-@router.get("/summary-by-day", response_model=list[DailySummaryResponse], summary="Получить выручку по дням за период")
+@router.get(
+    "/summary-by-day",
+    response_model=list[DailySummaryResponse],
+    summary="Сводка по UTC-дням создания заказов",
+)
 async def get_daily_summary(
     date_from: datetime,
     date_to: datetime,
