@@ -17,7 +17,13 @@ class AnalyticsSummaryResponse(BaseModel):
 class TopProductResponse(BaseModel):
     product_id: UUID
     orders_count: int = Field(gt=0)
-    units_ordered: int = Field(gt=0)
+    units_sold: int = Field(gt=0)
+    revenue: Decimal = Field(ge=0)
+
+
+class RevenueByDayResponse(BaseModel):
+    day: date
+    paid_orders_count: int = Field(gt=0)
     revenue: Decimal = Field(ge=0)
 
 

@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -14,3 +15,16 @@ class AnalyticsSummaryResponse(BaseModel):
 
 class DailySummaryResponse(AnalyticsSummaryResponse):
     day: date
+
+
+class TopProductResponse(BaseModel):
+    product_id: UUID
+    orders_count: int = Field(gt=0)
+    units_sold: int = Field(gt=0)
+    revenue: Decimal = Field(ge=0)
+
+
+class RevenueByDayResponse(BaseModel):
+    day: date
+    paid_orders_count: int = Field(gt=0)
+    revenue: Decimal = Field(ge=0)

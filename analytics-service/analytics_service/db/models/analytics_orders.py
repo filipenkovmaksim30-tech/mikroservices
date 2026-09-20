@@ -36,6 +36,7 @@ class AnalyticsOrder(Base):
             name="ck_analytics_orders_single_payment_result",
         ),
         Index("ix_analytics_orders_created_at", "created_at"),
+        Index("ix_analytics_orders_paid_at", "paid_at"),
         Index(
             "ix_analytics_orders_customer_created_at",
             "customer_id",

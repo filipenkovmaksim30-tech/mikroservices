@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from sqlalchemy import Numeric, cast, func, select
@@ -158,4 +159,60 @@ class AnalyticsOrderRepository:
                 items_by_day.get(row.day, 0),
             )
             for row in daily_orders
+        ]
+
+    async def get_top_products(
+        self,
+        date_from: datetime,
+        date_to: datetime,
+        limit: int,
+        sort_by: Literal["quantity", "revenue"],
+    ) -> list[tuple[UUID, int, int, Decimal]]:
+        units_sold = func.sum(AnalyticsOrderItem.quantity).label("units_sold")
+        revenue = func.sum(
+            AnalyticsOrderItem.quantity * AnalyticsOrderItem.unit_price
+        ).label("revenue")
+        orders_count = func.count(AnalyticsOrderItem.order_id).label("orders_count")
+        sort_columns = (
+            (revenue.desc(), units_sold.desc())
+            if sort_by == "revenue"
+            else (units_sold.desc(), revenue.desc())
+        )
+
+        statement = (
+            select(AnalyticsOrderItem.product_id, orders_count, units_sold, revenue)
+            .join(AnalyticsOrder, AnalyticsOrder.order_id == AnalyticsOrderItem.order_id)
+            .where(AnalyticsOrder.paid_at >= date_from)
+            .where(AnalyticsOrder.paid_at < date_to)
+            .group_by(AnalyticsOrderItem.product_id)
+            .order_by(*sort_columns, AnalyticsOrderItem.product_id)
+            .limit(limit)
+        )
+        result = await self._session.execute(statement)
+        return [
+            (row.product_id, row.orders_count, row.units_sold, row.revenue)
+            for row in result.all()
+        ]
+
+    async def get_revenue_by_day(
+        self,
+        date_from: datetime,
+        date_to: datetime,
+    ) -> list[tuple[date, int, Decimal]]:
+        day = func.date(func.timezone("UTC", AnalyticsOrder.paid_at)).label("day")
+        statement = (
+            select(
+                day,
+                func.count(AnalyticsOrder.order_id).label("paid_orders_count"),
+                func.sum(AnalyticsOrder.total_amount).label("revenue"),
+            )
+            .where(AnalyticsOrder.paid_at >= date_from)
+            .where(AnalyticsOrder.paid_at < date_to)
+            .group_by(day)
+            .order_by(day)
+        )
+        result = await self._session.execute(statement)
+        return [
+            (row.day, row.paid_orders_count, row.revenue)
+            for row in result.all()
         ]
