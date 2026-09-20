@@ -12,7 +12,7 @@ class CatalogBatchRequest(ContractModel):
 
 class CatalogProductSnapshot(ContractModel):
     id: UUID
-    price: Decimal = Field(ge=0)
+    price: Decimal = Field(gt=0)
     stock_quantity: int = Field(ge=0)
     is_active: bool
 

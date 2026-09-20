@@ -26,7 +26,7 @@ class Product(Base):
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
 
     __table_args__ = (
-        CheckConstraint("price >= 0",name="ck_products_price_non_negative"),
+        CheckConstraint("price > 0",name="ck_products_price_positive"),
         CheckConstraint("stock_quantity >= 0", name="ck_stock_quantity_non_negative"),
         Index("ix_products_category", "category")
     )
