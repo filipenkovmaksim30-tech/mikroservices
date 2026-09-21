@@ -1,8 +1,12 @@
+import hashlib
+
 from collections.abc import Sequence
 from dataclasses import dataclass
 from decimal import Decimal
+import json
 from uuid import UUID
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from messaging_lab.db.models.kafka_outbox import KafkaOutboxEvent
@@ -16,6 +20,7 @@ from messaging_lab.exceptions import (
     InsufficientProductStockError,
     OrderNotFoundError,
     ProductsNotFoundError,
+    OrderIdempotentConflictError,
 )
 from messaging_lab.integrations.catalog import CatalogClient
 from messaging_lab.messaging.contracts.payments import PaymentRequestedV1
@@ -108,6 +113,8 @@ class OrderService:
     def _build_order(
         self,
         customer_id: UUID,
+        idempotency_key: str,
+        request_hash: str,
         receipt_email: str,
         items: Sequence[CreateOrderItem],
         products_by_id: dict[UUID, CatalogProductSnapshot],
@@ -127,6 +134,8 @@ class OrderService:
             total_amount += product.price * item.quantity
         order = Order(
             customer_id=customer_id,
+            idempotency_key=idempotency_key,
+            request_hash=request_hash,
             receipt_email=receipt_email,
             total_amount=total_amount,
             items=order_items
@@ -196,12 +205,44 @@ class OrderService:
             payload=payload,
         )
 
+    def _calculate_request_hash(
+        self,
+        receipt_email: str,
+        items: Sequence[CreateOrderItem]
+    ) -> str:
+        payload = {
+            "receipt_email": receipt_email,
+            "items": [
+                {
+                    "product_id": str(item.product_id),
+                    "quantity": str(item.quantity)
+                }
+                for item in sorted(items, key=lambda item: str(item.product_id))
+            ],
+        }
+        canonical_json = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical_json.encode("utf-8")).hexdigest()
+
     async def create_order(
         self,
         customer_id: UUID,
         receipt_email: str,
+        idempotency_key: str,
         items: Sequence[CreateOrderItem],
     ) -> Order:
+        request_hash = self._calculate_request_hash(receipt_email, items)
+
+        async with self._session.begin():
+            existing_order = await self._order_repository.get_by_customer_id_idempotency_key(
+                customer_id=customer_id,
+                idempotency_key=idempotency_key,
+            )
+
+        if existing_order is not None:
+            if existing_order.request_hash != request_hash:
+                raise OrderIdempotentConflictError(customer_id, idempotency_key)
+            return existing_order
+
         product_ids = self._collect_product_ids(items)
         products = await self._catalog_client.get_products_by_ids(product_ids=product_ids)
         products_by_id = self._validate_and_index_products(
@@ -209,18 +250,35 @@ class OrderService:
             products=products,
         )
         self._validate_stock(items=items, products_by_id=products_by_id)
-        async with self._session.begin():
-            order = self._build_order(
-                customer_id=customer_id,
-                receipt_email=receipt_email,
-                items=items,
-                products_by_id=products_by_id,
-            )
-            created_order = await self._order_repository.add(order)
-            reservation_requested_event = self._build_reservation_requested_event(created_order)
-            kafka_event = self._build_order_analytics_event(created_order)
-            await self._rabbitmq_outbox_repository.add(reservation_requested_event)
-            await self._kafka_outbox_repository.add(kafka_event)
+        try:
+            async with self._session.begin():
+                order = self._build_order(
+                    customer_id=customer_id,
+                    idempotency_key=idempotency_key,
+                    request_hash=request_hash,
+                    receipt_email=receipt_email,
+                    items=items,
+                    products_by_id=products_by_id,
+                )
+                created_order = await self._order_repository.add(order)
+                reservation_requested_event = self._build_reservation_requested_event(created_order)
+                kafka_event = self._build_order_analytics_event(created_order)
+                await self._rabbitmq_outbox_repository.add(reservation_requested_event)
+                await self._kafka_outbox_repository.add(kafka_event)
+        except IntegrityError as exc:
+            if getattr(exc.orig.__cause__, "constraint_name", None) != "uq_order_customer_id_idempotency_key":
+                raise
+            
+            async with self._session.begin():
+                existing_order = await self._order_repository.get_by_customer_id_idempotency_key(
+                    customer_id=customer_id,
+                    idempotency_key=idempotency_key,
+                )
+            if existing_order is None:
+                raise
+            if existing_order.request_hash != request_hash:
+                raise OrderIdempotentConflictError(customer_id, idempotency_key) from exc
+            return existing_order
         return created_order
 
     async def get_order(self, order_id: UUID) -> Order:

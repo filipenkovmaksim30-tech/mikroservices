@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 from messaging_lab.config import Settings
 from messaging_lab.db.session import async_engine
 from messaging_lab.exceptions import (
+    OrderIdempotentConflictError,
     OrderNotFoundError,
     OrderValidationError,
     InvalidAccessTokenError,
@@ -71,6 +72,16 @@ async def handle_order_validation_error(
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={"detail": str(exc)},
+    )
+
+@app.exception_handler(OrderIdempotentConflictError)
+async def handle_order_idempotency_conflict(
+    request: Request,
+    exc: OrderIdempotentConflictError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
         content={"detail": str(exc)},
     )
 

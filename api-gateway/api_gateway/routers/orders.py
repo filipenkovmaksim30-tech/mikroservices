@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Response, status
+from fastapi import APIRouter, Query, Header, Response, status
 
 from api_gateway.api_clients.http import build_gateway_response, request_upstream
 from api_gateway.routers.dependencies import (
@@ -17,6 +17,7 @@ OffsetQuery = Annotated[int, Query(ge=0)]
 router = APIRouter(tags=["Orders"], prefix="/orders")
 
 
+
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
@@ -26,6 +27,7 @@ router = APIRouter(tags=["Orders"], prefix="/orders")
 async def create_order(
     authorization_headers: AuthorizationHeadersDependency,
     forwarded_headers: ForwardedHeadersDependency,
+    idempotency_key: Annotated[str, Header(alias="Idempotency-Key", min_length=1, max_length=128)],
     payload: OrderCreate,
     client: HttpClientDependency,
     settings: SettingsDependency,
@@ -40,6 +42,7 @@ async def create_order(
         headers={
             **authorization_headers,
             **forwarded_headers,
+            "Idempotency-Key": idempotency_key,
         }
     )
 

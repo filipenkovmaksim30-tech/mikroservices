@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, Index, Numeric, String, Uuid, func
+from sqlalchemy import CheckConstraint, UniqueConstraint, DateTime, Enum, Index, Numeric, String, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from messaging_lab.db.models.base import Base
@@ -26,6 +26,8 @@ class Order(Base):
     __tablename__ = "orders"
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    request_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     customer_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     receipt_email: Mapped[str] = mapped_column(String(320), nullable=False)
     total_amount: Mapped[Decimal] = mapped_column(Numeric(precision=18, scale=2), nullable=False)
@@ -45,5 +47,6 @@ class Order(Base):
 
     __table_args__ = (
         CheckConstraint("total_amount >= 0", name="ck_orders_total_amount_non_negative"),
+        UniqueConstraint("customer_id", "idempotency_key", name="uq_order_customer_id_idempotency_key"),
         Index("ix_orders_customer_id", "customer_id"),
     )

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Query, Request, status
+from fastapi import APIRouter, Header, Query, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
@@ -35,6 +35,9 @@ async def create_order(
     data: OrderCreate,
     current_customer: CurrentPrincipalDependency,
     service: OrderServiceDependency,
+    idempotency_key: Annotated[str, 
+        Header(alias="Idempotency-Key", min_length=1, max_length=128),
+    ],
 ) -> Order:
     items = [
         CreateOrderItem(
@@ -43,7 +46,12 @@ async def create_order(
         )
         for item in data.items
     ]
-    return await service.create_order(customer_id=current_customer.sub, receipt_email=str(data.receipt_email), items=items)
+    return await service.create_order(
+        customer_id=current_customer.sub, 
+        receipt_email=str(data.receipt_email),
+        idempotency_key=idempotency_key,
+        items=items
+    )
 
 
 @router.get(

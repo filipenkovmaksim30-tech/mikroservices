@@ -21,6 +21,14 @@ class OrderRepository:
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
 
+    async def get_by_customer_id_idempotency_key(self, customer_id: UUID, idempotency_key: str) -> Order | None:
+        statement = (
+            select(Order)
+            .where(Order.customer_id == customer_id, Order.idempotency_key == idempotency_key)
+        )
+        result = await self._session.execute(statement)
+        return result.scalar_one_or_none()
+
     async def mark_pending_payment(self, order: Order) -> Order:
         order.status = OrderStatus.PENDING_PAYMENT
         await self._session.flush()

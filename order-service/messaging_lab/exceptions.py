@@ -50,6 +50,10 @@ class InactiveProductsError(OrderValidationError):
         self.product_ids = product_ids
         super().__init__(f"Products are inactive: {sorted(map(str, product_ids))}")
 
+class OrderIdempotentConflictError(OrderValidationError):
+    def __init__(self, customer_id: UUID, idempotency_key: str):
+        super().__init__(f"For customer: {customer_id}, idempotency_key = {idempotency_key} is already exists")
+
 class PermanentPaymentResultError(Exception):
     """Base error for a payment result that cannot succeed after retry."""
 
