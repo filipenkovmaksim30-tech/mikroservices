@@ -23,23 +23,28 @@ class PaymentExecutionWorker:
         session_factory: async_sessionmaker[AsyncSession],
         payment_provider: PaymentProvider,
         batch_size: int,
-        poll_interval_seconds: float
+        poll_interval_seconds: float,
+        payment_processing_lease_seconds: int,
         ):
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
         if poll_interval_seconds <= 0:
             raise ValueError("poll_interval_seconds must be positive")
 
+        if payment_processing_lease_seconds <= 0:
+            raise ValueError("payment_processing_lease_seconds must be positive")
+
         self._session_factory = session_factory
         self._payment_provider = payment_provider
         self._batch_size= batch_size
         self._poll_interval_seconds = poll_interval_seconds
+        self._payment_processing_lease_seconds = payment_processing_lease_seconds
 
-    async def _get_pending_ids(self) -> list[UUID]:
+    async def _get_runnable_ids(self) -> list[UUID]:
         async with self._session_factory() as session:
             repository = PaymentRepository(session)
             async with session.begin():
-                return await repository.get_pending_ids(limit=self._batch_size)
+                return await repository.get_runnable_ids(limit=self._batch_size)
 
     async def _execute_payment(self, payment_id: UUID) -> bool:
         async with self._session_factory() as session:
@@ -51,6 +56,7 @@ class PaymentExecutionWorker:
                 outbox_repository=outbox_repository,
                 payment_repository=payment_repository,
                 payment_provider=self._payment_provider,
+                payment_processing_lease_seconds=self._payment_processing_lease_seconds,
             )
             return await service.execute(payment_id)
 
@@ -58,7 +64,7 @@ class PaymentExecutionWorker:
     async def run(self) -> None:
         while True:
             try:
-                payment_ids = await self._get_pending_ids()
+                payment_ids = await self._get_runnable_ids()
 
                 for payment_id in payment_ids:
                     try:
@@ -93,7 +99,8 @@ async def main() -> None:
             session_factory=async_session_factory,
             payment_provider=payment_provider,
             batch_size=settings.payment_execution_batch_size,
-            poll_interval_seconds=settings.payment_execution_poll_interval_seconds
+            poll_interval_seconds=settings.payment_execution_poll_interval_seconds,
+            payment_processing_lease_seconds=settings.payment_processing_lease_seconds,
         )
 
         await worker.run()

@@ -28,6 +28,7 @@ class Settings(BaseSettings):
 
     payment_execution_batch_size: int = Field(default=100, gt=0)
     payment_execution_poll_interval_seconds: float = Field(default=1.0, gt=0)
+    payment_processing_lease_seconds: int = Field(default=30, gt=0)
     fake_payment_delay_seconds: float = Field(default=5.0, ge=0)
     fake_payment_should_succeed: bool = True
 

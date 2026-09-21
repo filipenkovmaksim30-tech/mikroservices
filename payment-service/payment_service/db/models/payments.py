@@ -8,6 +8,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     Enum as SQLAlchemyEnum,
+    Integer,
     Numeric,
     String,
     UniqueConstraint,
@@ -20,6 +21,7 @@ from payment_service.db.models.base import Base
 
 class PaymentStatus(str, enum.Enum):
     PENDING = "pending"
+    PROCESSING = "processing"
     SUCCEEDED = "succeeded"
     FAILED = "failed"
 
@@ -34,6 +36,9 @@ class Payment(Base):
     order_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     amount: Mapped[Decimal] = mapped_column(Numeric(18, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
+    processing_token: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
+    processing_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    processing_attempts: Mapped[int] = mapped_column(Integer, server_default="0", default=0, nullable=False)
     status: Mapped[PaymentStatus] = mapped_column(
         SQLAlchemyEnum(
             PaymentStatus,
@@ -59,10 +64,31 @@ class Payment(Base):
             name="ck_payments_currency_rub",
         ),
         CheckConstraint(
-            "(status = 'pending' AND completed_at IS NULL AND failure_code IS NULL) "
-            "OR (status = 'succeeded' AND completed_at IS NOT NULL AND failure_code IS NULL) "
-            "OR (status = 'failed' AND completed_at IS NOT NULL AND failure_code IS NOT NULL)",
+            "(status = 'pending' "
+            "AND completed_at IS NULL "
+            "AND failure_code IS NULL "
+            "AND processing_token IS NULL "
+            "AND processing_expires_at IS NULL) "
+            "OR (status = 'processing' "
+            "AND completed_at IS NULL "
+            "AND failure_code IS NULL "
+            "AND processing_token IS NOT NULL "
+            "AND processing_expires_at IS NOT NULL) "
+            "OR (status = 'succeeded' "
+            "AND completed_at IS NOT NULL "
+            "AND failure_code IS NULL "
+            "AND processing_token IS NULL "
+            "AND processing_expires_at IS NULL) "
+            "OR (status = 'failed' "
+            "AND completed_at IS NOT NULL "
+            "AND failure_code IS NOT NULL "
+            "AND processing_token IS NULL "
+            "AND processing_expires_at IS NULL)",
             name="ck_payments_status_fields_consistent",
+        ),
+        CheckConstraint(
+            "processing_attempts >= 0",
+            name="ck_payments_processing_attempts_non_negative",
         ),
         CheckConstraint(
             "failure_code IS NULL OR length(btrim(failure_code)) > 0",

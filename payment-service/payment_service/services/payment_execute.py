@@ -1,6 +1,6 @@
 
-from datetime import UTC, datetime
-from uuid import UUID
+from datetime import UTC, datetime, timedelta
+from uuid import UUID, uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,7 +10,6 @@ from payment_service.services.payment_provider import PaymentProvider
 from payment_service.messaging.contracts import PaymentFailedV1, PaymentSucceededV1
 from payment_service.db.models.payments import Payment, PaymentStatus
 from payment_service.db.models.payments_outbox import RabbitMQOutboxEvent
-from payment_service.exceptions  import PaymentRequestConflictError
 
 class PaymentExecuteService:
     def __init__(
@@ -19,12 +18,18 @@ class PaymentExecuteService:
         outbox_repository: RabbitMQOutboxRepository,
         payment_repository: PaymentRepository,
         payment_provider: PaymentProvider,
+        payment_processing_lease_seconds: int,
 
     ) -> None:
+
+        if payment_processing_lease_seconds <= 0:
+            raise ValueError("payment_processing_lease_seconds must be positive")
+        
         self._session = session
         self._outbox_repository = outbox_repository
         self._payment_repository = payment_repository
         self._payment_provider = payment_provider
+        self._payment_processing_lease_seconds = payment_processing_lease_seconds
 
     def _build_payment_succeeded_event(self, payment: Payment) -> RabbitMQOutboxEvent:
         if payment.status is not PaymentStatus.SUCCEEDED:
@@ -77,30 +82,43 @@ class PaymentExecuteService:
         )
 
     async def execute(self, payment_id: UUID) -> bool:
+        processing_token = uuid4()
+        processing_expires_at=datetime.now(UTC) + timedelta(seconds=self._payment_processing_lease_seconds)
+
         async with self._session.begin():
-            payment = await self._payment_repository.get_by_id(payment_id)
-            if payment is None:
-                raise ValueError("payment not found")
-            if payment.status is not PaymentStatus.PENDING:
+            claimed_payment = await self._payment_repository.claim_for_processing(
+                payment_id=payment_id,
+                processing_token=processing_token,
+                processing_expires_at=processing_expires_at,
+            )
+
+            if claimed_payment is None:
                 return False
-            order_id = payment.order_id
-            amount = payment.amount
-            currency = payment.currency
+
+            provider_idempotency_key = claimed_payment.id
+            order_id = claimed_payment.order_id
+            amount = claimed_payment.amount
+            currency = claimed_payment.currency
 
         payment_result = await self._payment_provider.charge(
+            idempotency_key=provider_idempotency_key,
             order_id=order_id,
             amount=amount,
             currency=currency,
         )
 
         async with self._session.begin():
-            payment = await self._payment_repository.get_by_id(payment_id)
+            payment = await self._payment_repository.get_by_id_for_update(payment_id)
             if payment is None:
                 raise ValueError("payment not found")
 
+
             await self._session.refresh(payment)
 
-            if payment.status is not PaymentStatus.PENDING:
+            if (
+                payment.status is not PaymentStatus.PROCESSING 
+                or payment.processing_token != processing_token
+            ):
                 return False
 
             completed_at = datetime.now(UTC)

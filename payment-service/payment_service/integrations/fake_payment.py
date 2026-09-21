@@ -23,6 +23,7 @@ class FakePaymentProvider:
 
     async def charge(
         self,
+        idempotency_key: UUID,
         order_id: UUID,
         amount: Decimal,
         currency: str
