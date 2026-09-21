@@ -15,6 +15,7 @@ from analytics_service.repositories.processed_event import ProcessedEventReposit
 from analytics_service.services.order_created import OrderCreatedAnalyticsService
 from analytics_service.services.order_payment import AnalyticPaymentService
 from analytics_service.messaging.kafka_dlq import publish_to_dlq
+from analytics_service.exceptions import PermanentAnalyticsEventError
 
 ANALYTICS_ORDER_ADAPTER = TypeAdapter(AnalyticsOrderEnvelope)
 
@@ -65,4 +66,13 @@ async def handle_message(
             producer=dlq_producer,
             dlq_topic=settings.kafka_analytics_dlq_topic,
             message=message,
+            error_type="validation_error"
         )
+    except PermanentAnalyticsEventError as exc:
+        await publish_to_dlq(
+            producer=dlq_producer,
+            dlq_topic=settings.kafka_analytics_dlq_topic,
+            message=message,
+            error_type=type(exc).__name__,
+        )
+    # TODO: publish OrderNotFoundError to a retry topic with retry count and delayed reprocessing. bug №11

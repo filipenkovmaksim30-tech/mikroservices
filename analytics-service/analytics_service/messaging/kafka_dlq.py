@@ -5,11 +5,12 @@ async def publish_to_dlq(
     producer: AIOKafkaProducer,
     dlq_topic: str,
     message: ConsumerRecord,
+    error_type: str
 ) -> None:
     headers = list(message.headers or [])
     headers.extend(
         [
-            ("x-error-type", b"validation_error"),
+            ("x-error-type", error_type.encode("utf-8")),
             ("x-original-topic", message.topic.encode("utf-8")),
             (
                 "x-original-partition",
