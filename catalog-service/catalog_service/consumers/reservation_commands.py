@@ -5,10 +5,10 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from catalog_service.consumers.retry_or_send_to_dlq import retry_or_send_to_dlq
 from catalog_service.messaging.contracts.stock_reservations import (
     StockReservationRequestedEnvelopeV1,
 )
-
 from catalog_service.messaging.rabbitmq.topology.reservation_commands import (
     RESERVATION_REQUEST_RETRY_ROUTING_KEY,
 )
@@ -17,7 +17,6 @@ from catalog_service.repositories.outbox import RabbitMQOutboxRepository
 from catalog_service.repositories.products import ProductRepository
 from catalog_service.repositories.reservation import StockReservationRepository
 from catalog_service.services.reservation import StockReservationService
-from catalog_service.consumers.retry_or_send_to_dlq import retry_or_send_to_dlq
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +29,25 @@ async def handle_reservation_requested(
 ) -> None:
     try:
         event = StockReservationRequestedEnvelopeV1.model_validate_json(message.body)
+
+    except ValidationError as exc:
+        logger.error(
+            "Permanent message validation error: message_id=%s errors=%s",
+            message.message_id,
+            exc.error_count(),
+        )
+        await message.reject(requeue=False)
+        return
+
+    except Exception:
+        logger.exception(
+            "Unexpected reservation_commands message parsing error: message_id=%s",
+            message.message_id,
+        )
+        await message.reject(requeue=False)
+        return
+
+    try:
         async with session_factory() as session:
             product_repository = ProductRepository(session)
             reservation_repository = StockReservationRepository(session)
@@ -46,16 +64,21 @@ async def handle_reservation_requested(
 
             await service.process(event)
 
-    except ValidationError as exc:
-        logger.error(
-            "Permanent message validation error: message_id=%s errors=%s",
-            message.message_id,
-            exc.error_count(),
+    except (SQLAlchemyError, OSError):
+        await retry_or_send_to_dlq(
+            message=message,
+            retry_exchange=retry_exchange,
+            retry_routing_key=RESERVATION_REQUEST_RETRY_ROUTING_KEY,
+            event_id=str(event.event_id),
+            correlation_id=str(event.correlation_id),
         )
-        await message.reject(requeue=False)
         return
 
-    except (SQLAlchemyError, OSError):
+    except Exception:
+        logger.exception(
+            "Unexpected stock reservation commands processing error: message_id=%s",
+            message.message_id,
+        )
         await retry_or_send_to_dlq(
             message=message,
             retry_exchange=retry_exchange,

@@ -75,4 +75,4 @@ async def handle_message(
             message=message,
             error_type=type(exc).__name__,
         )
-    # TODO: publish OrderNotFoundError to a retry topic with retry count and delayed reprocessing. bug №11
+    # TODO: publish OrderNotFoundError to a retry topic with retry count and delayed reprocessing. bug №11:

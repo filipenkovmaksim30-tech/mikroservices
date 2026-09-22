@@ -36,7 +36,18 @@ async def retry_or_send_to_dlq(
         if message.headers
         else 0
     )
-    retry_count = int(raw_retry_count)
+    try:
+        retry_count = int(raw_retry_count)
+        if retry_count < 0:
+            raise ValueError
+    except (TypeError, ValueError, UnicodeDecodeError):
+        logger.error(
+            "Invalid retry header: message_id=%s value=%r",
+            message.message_id,
+            raw_retry_count,
+        )
+        await message.reject(requeue=False)
+        return
 
     if retry_count >= MAX_RETRY_ATTEMPTS:
         logger.error(
@@ -48,17 +59,26 @@ async def retry_or_send_to_dlq(
         return
     
     next_retry_count = retry_count + 1
-            
-    await publish_message(
-        exchange=retry_exchange,
-        routing_key=retry_routing_key,
-        body=message.body,
-        message_id=event_id,
-        correlation_id=correlation_id,
-        headers={
-            "x-retry-count": next_retry_count
-        },
-    )
+
+    try:     
+        await publish_message(
+            exchange=retry_exchange,
+            routing_key=retry_routing_key,
+            body=message.body,
+            message_id=event_id,
+            correlation_id=correlation_id,
+            headers={
+                "x-retry-count": next_retry_count
+            },
+        )
+    except Exception:
+        logger.exception(
+            "Failed to publish payment result message to retry queue: message_id=%s",
+            message.message_id,
+        )
+        await message.reject(requeue=False)
+        return
+    
     await message.ack()
 
 async def handler_payment_result(
@@ -71,6 +91,14 @@ async def handler_payment_result(
         event = PAYMENT_RESULT_ADAPTER.validate_json(message.body)
 
     except ValidationError:
+        await message.reject(requeue=False)
+        return
+
+    except Exception:
+        logger.exception(
+            "Unexpected payment_result message parsing error: message_id=%s",
+            message.message_id,
+        )
         await message.reject(requeue=False)
         return
     
@@ -92,17 +120,40 @@ async def handler_payment_result(
         
             await service.process(event=event)
 
-    except PermanentPaymentResultError:
+    except PermanentPaymentResultError as exc:
+        logger.error(
+            "Permanent payment result error: message_id=%s error=%s",
+            message.message_id,
+            exc,
+        )
         await message.reject(requeue=False)
         return 
 
     except (OrderNotFoundError, SQLAlchemyError, OSError):
+        logger.exception(
+            "Temporary payment result error: message_id=%s",
+            message.message_id,
+        )
         await retry_or_send_to_dlq(
             message=message,
             retry_exchange=retry_exchange,
             retry_routing_key=PAYMENT_RESULTS_RETRY_ROUTING_KEY,
             event_id=str(event.event_id),
             correlation_id=str(event.correlation_id)
+        )
+        return
+
+    except Exception:
+        logger.exception(
+            "Unexpected payment result error: message_id=%s",
+            message.message_id,
+        )
+        await retry_or_send_to_dlq(
+            message=message,
+            retry_exchange=retry_exchange,
+            retry_routing_key=PAYMENT_RESULTS_RETRY_ROUTING_KEY,
+            event_id=str(event.event_id),
+            correlation_id=str(event.correlation_id),
         )
         return
 
