@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     rabbitmq_password: SecretStr
     rabbitmq_vhost: str = Field(min_length=1)
 
+    redis_url: str = Field(min_length=1)
+
     postgresql_host: str
     postgresql_port: int = Field(gt=0, le=65535)
     postgresql_user: str = Field(min_length=1)

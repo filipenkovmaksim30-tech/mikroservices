@@ -4,6 +4,7 @@ from fastapi import APIRouter, Header, Query, Request, status
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
+from messaging_lab.config import Settings
 from messaging_lab.db.models.order import Order
 from messaging_lab.schemas.order import OrderCreate, OrderRead
 from messaging_lab.services.orders import CreateOrderItem
@@ -14,6 +15,7 @@ router = APIRouter(tags=["Orders"], prefix="/orders")
 LimitQuery = Annotated[int, Query(ge=1, le=100)]
 OffsetQuery = Annotated[int, Query(ge=0)]
 
+settings = Settings()
 
 def get_client_address(request: Request) -> str:
     real_ip = request.headers.get("x-real-ip")
@@ -21,7 +23,7 @@ def get_client_address(request: Request) -> str:
         return real_ip
     return get_remote_address(request)
 
-limiter = Limiter(key_func=get_client_address, storage_uri="memory://")
+limiter = Limiter(key_func=get_client_address, storage_uri=settings.redis_url)
 
 @router.post(
     "",

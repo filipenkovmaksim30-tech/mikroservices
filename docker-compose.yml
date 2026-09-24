@@ -13,6 +13,7 @@ x-order-service: &order-service
     KAFKA_ANALYTICS_TOPIC: ${KAFKA_ANALYTICS_TOPIC}
     JWT_PUBLIC_KEY_PATH: /run/secrets/auth_jwt_public.pem
     CATALOG_BASE_URL: http://catalog-api:8000
+    REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
   restart: unless-stopped
 
 x-analytics-service: &analytics-service
@@ -63,6 +64,7 @@ x-auth-service: &auth-service
   environment:
     POSTGRESQL_HOST: auth-postgres
     POSTGRESQL_PORT: 5432
+    REDIS_URL: ${REDIS_URL}
   volumes:
     - ./auth-service/secrets:/app/secrets:ro
   restart: unless-stopped
@@ -479,9 +481,34 @@ services:
       - api-gateway
     restart: unless-stopped
 
+  redis:
+    image: redis:7.2-alpine
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis-gui:
+    image: redis/redisinsight
+    ports:
+      - "5540:5540"
+    depends_on:
+      redis:
+        condition: service_healthy
+
 volumes:
   rabbitmq_data:
   kafka_data:
+  redis_data:
   orders_postgres_data:
   analytics_postgres_data:
   payment_postgres_data:

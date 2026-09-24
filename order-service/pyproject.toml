@@ -18,6 +18,7 @@ dependencies = [
     "pyjwt[crypto]>=2.13.0",
     "httpx>=0.28.1",
     "slowapi>=0.1.10",
+    "redis>=8.1.0",
 ]
 
 [dependency-groups]

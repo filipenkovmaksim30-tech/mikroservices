@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from sqlalchemy import exists, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,10 +20,10 @@ class InboxRepository:
         statement = (
             insert(InboxEvent)
             .values(
-                consumer_name=consumer_name, 
-                event_id=event_id, 
+                consumer_name=consumer_name,
+                event_id=event_id,
                 event_type=event_type,
-                )
+            )
             .on_conflict_do_nothing(
                 index_elements=[
                     InboxEvent.consumer_name,
@@ -36,4 +37,15 @@ class InboxRepository:
         inserted_event_id = result.scalar_one_or_none()
         return inserted_event_id is not None
 
-    
+    async def exists(
+        self,
+        consumer_name: str,
+        event_id: UUID,
+    ) -> bool:
+        statement = select(
+            exists().where(
+                InboxEvent.consumer_name == consumer_name,
+                InboxEvent.event_id == event_id,
+            )
+        )
+        return bool(await self._session.scalar(statement))

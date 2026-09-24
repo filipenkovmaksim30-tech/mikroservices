@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     postgresql_password: SecretStr
     postgresql_db: str = Field(min_length=1)
 
+    redis_url: str = Field(min_length=1)
+
     jwt_private_key_path: Path
     jwt_public_key_path: Path
     jwt_algorithm: Literal["RS256"] = "RS256"
