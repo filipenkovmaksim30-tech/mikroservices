@@ -151,3 +151,87 @@ async def test_upstream_connection_error_becomes_503(
 
     assert response.status_code == 503
     assert response.json() == {"detail": "Upstream service unavailable"}
+
+
+@pytest.mark.parametrize(
+    ("path", "upstream_path"),
+    [
+        ("/api/products/{id}", "/products/{id}"),
+        ("/api/admin/orders/{id}", "/admin/orders/{id}"),
+        ("/api/admin/payments/by-order/{id}", "/admin/payments/by-order/{id}"),
+    ],
+)
+async def test_id_routes_forward_exact_resource(
+    gateway: tuple[httpx.AsyncClient, list[httpx.Request]],
+    path: str,
+    upstream_path: str,
+) -> None:
+    client, requests = gateway
+    resource_id = str(uuid4())
+    response = await client.get(
+        path.format(id=resource_id), headers={"Authorization": "Bearer signed-token"}
+    )
+
+    assert response.status_code == 200
+    assert requests[0].url.path == upstream_path.format(id=resource_id)
+
+
+async def test_admin_payments_forwards_status_filter(
+    gateway: tuple[httpx.AsyncClient, list[httpx.Request]],
+) -> None:
+    client, requests = gateway
+    response = await client.get(
+        "/api/admin/payments",
+        params={"status": "succeeded", "limit": 3, "offset": 2},
+        headers={"Authorization": "Bearer signed-token"},
+    )
+
+    assert response.status_code == 200
+    assert dict(requests[0].url.params) == {
+        "status": "succeeded", "limit": "3", "offset": "2"
+    }
+
+
+async def test_analytics_summary_forwards_date_range(
+    gateway: tuple[httpx.AsyncClient, list[httpx.Request]],
+) -> None:
+    client, requests = gateway
+    response = await client.get(
+        "/api/admin/analytics/summary",
+        params={"date_from": "2026-01-01T00:00:00Z", "date_to": "2026-02-01T00:00:00Z"},
+        headers={"Authorization": "Bearer signed-token"},
+    )
+
+    assert response.status_code == 200
+    assert requests[0].url.host == "analytics.test"
+    assert requests[0].url.path == "/analytics/summary"
+    assert requests[0].url.params["date_from"].startswith("2026-01-01T00:00:00")
+
+
+async def test_register_forwards_validated_json(
+    gateway: tuple[httpx.AsyncClient, list[httpx.Request]],
+) -> None:
+    client, requests = gateway
+    response = await client.post(
+        "/api/auth/register",
+        json={
+            "email": "buyer@example.com",
+            "password": "password12345",
+            "repeat_password": "password12345",
+        },
+    )
+
+    assert response.status_code == 200
+    assert requests[0].url.path == "/auth/register"
+    assert b'"email":"buyer@example.com"' in requests[0].content
+
+
+async def test_logout_forwards_cookie(
+    gateway: tuple[httpx.AsyncClient, list[httpx.Request]],
+) -> None:
+    client, requests = gateway
+    client.cookies.set("refresh_token", "original", domain="gateway.test", path="/api/auth")
+    response = await client.post("/api/auth/logout")
+
+    assert response.status_code == 200
+    assert requests[0].headers["cookie"] == "refresh_token=original"
