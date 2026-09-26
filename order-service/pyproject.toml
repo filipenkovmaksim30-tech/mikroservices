@@ -40,6 +40,9 @@ packages = ["messaging_lab"]
 addopts = "-ra --strict-config --strict-markers"
 testpaths = ["tests"]
 asyncio_mode = "auto"
+markers = [
+    "integration: requires a dedicated PostgreSQL database named *_test",
+]
 
 [tool.ruff]
 target-version = "py313"

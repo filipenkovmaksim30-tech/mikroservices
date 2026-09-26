@@ -29,6 +29,7 @@ class EventContractTests(TestCase):
             OrderCreatedV1(
                 order_id=uuid4(),
                 customer_id=uuid4(),
+                receipt_email="buyer@example.com",
                 items=[self.item],
                 total_amount=Decimal("1.00"),
             )
@@ -37,6 +38,7 @@ class EventContractTests(TestCase):
         payload = OrderCreatedV1(
             order_id=uuid4(),
             customer_id=uuid4(),
+            receipt_email="buyer@example.com",
             items=[self.item],
             total_amount=Decimal("3000.00"),
         )
