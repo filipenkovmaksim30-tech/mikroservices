@@ -1,4 +1,6 @@
 import asyncio
+import logging
+from analytics_service.observability import configure_logging
 
 from aiokafka import AIOKafkaConsumer, AIOKafkaProducer, TopicPartition
 
@@ -6,6 +8,8 @@ from analytics_service.config import Settings
 from analytics_service.db.session import async_engine
 
 from analytics_service.consumers.order_events import handle_message
+
+logger = logging.getLogger(__name__)
 
 async def consume_messages(
     consumer: AIOKafkaConsumer,
@@ -28,9 +32,18 @@ async def consume_messages(
                 topic_partition: message.offset + 1,
             }
         )
+        logger.info(
+            "message.offset_committed",
+            extra={
+                "topic": message.topic,
+                "partition": message.partition,
+                "offset": message.offset + 1,
+            },
+        )
 
 
 async def run() -> None:
+    configure_logging()
     settings = Settings()
 
     dlq_producer = AIOKafkaProducer(

@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from auth_service.observability import install_http_logging
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -105,6 +106,7 @@ async def handle_permission_denied(
         content={"detail": str(exc)},
     )
 
+install_http_logging(app)
 app.include_router(register_router)
 app.include_router(login_router)
 app.include_router(users_router)

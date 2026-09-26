@@ -1,7 +1,9 @@
+import logging
 from typing import Protocol
 
 from messaging_lab.messaging.contracts.notifications import OrderNotificationEnvelopeV1
 
+logger = logging.getLogger(__name__)
 
 class TransientNotificationError(Exception):
     pass
@@ -26,13 +28,13 @@ class ConsoleNotificationProvider:
         event: OrderNotificationEnvelopeV1,
         idempotency_key: str,
     ) -> None:
-        print(
-            "Notification processed:",
-            f"event_type={event.event_type}",
-            f"order_id={event.payload.order_id}",
-            f"receipt_email={event.payload.receipt_email}",
-            f"event_id={event.event_id}",
-            f"idempotency_key={idempotency_key}",
+        logger.info(
+            "notification.console_processed",
+            extra={
+                "event_type": event.event_type,
+                "event_id": event.event_id,
+                "order_id": event.payload.order_id,
+            },
         )
 
 class NotificationService:

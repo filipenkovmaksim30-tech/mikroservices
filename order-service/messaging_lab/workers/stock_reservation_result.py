@@ -1,4 +1,5 @@
 import asyncio
+from messaging_lab.observability import configure_logging
 from functools import partial
 
 from messaging_lab.config import Settings
@@ -20,6 +21,7 @@ from messaging_lab.consumers.reservation_result import handler_stock_reservation
 STOCK_RESERVATION_RESULTS_CONSUMER = "order-service.stock-reservation-results.v1"
 
 async def main() -> None:
+    configure_logging()
     settings = Settings()
 
     connection = await connect_rabbitmq(settings.rabbitmq_url)

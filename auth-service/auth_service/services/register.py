@@ -1,4 +1,4 @@
-
+import logging
 
 from anyio import to_thread
 from sqlalchemy.exc import IntegrityError
@@ -10,6 +10,7 @@ from auth_service.repositories.users import UserRepository
 from auth_service.schemas.users import UserRegister
 from auth_service.security.passwords import PasswordHasher
 
+logger = logging.getLogger(__name__)
 
 class RegistrationService:
     def __init__(
@@ -43,6 +44,7 @@ class RegistrationService:
         except IntegrityError as exc:
             raise EmailAlreadyRegisteredError(email) from exc
 
+        logger.info("auth.registration_succeeded", extra={"user_id": user.id})
         return user
                     
 

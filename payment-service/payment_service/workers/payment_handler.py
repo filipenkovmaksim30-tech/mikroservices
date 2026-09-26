@@ -1,4 +1,5 @@
 import asyncio
+from payment_service.observability import configure_logging
 
 from functools import partial
 
@@ -22,6 +23,7 @@ from payment_service.messaging.rabbitmq.topology.payment_commands import (
 PAYMENT_REQUEST_CONSUMER = "payment-service.payment-requested.v1"
 
 async def main() -> None:
+    configure_logging()
     settings = Settings()
     connection = await connect_rabbitmq(url=settings.rabbitmq_url)
     try:

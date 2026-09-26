@@ -1,4 +1,5 @@
 import asyncio
+from catalog_service.observability import configure_logging
 import logging
 
 from catalog_service.config import Settings
@@ -13,11 +14,8 @@ logger = logging.getLogger(__name__)
 
 
 async def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
-    logger.info("Starting outbox publisher")
+    configure_logging()
+    logger.info("worker.starting")
 
     settings = Settings()
 
@@ -25,7 +23,7 @@ async def main() -> None:
     try:
         channel = await declare_channel(connection)
         reservation_result_exchange = await declare_reservation_result_exchange(channel)
-        logger.info("RabbitMQ topology declared; outbox worker is running")
+        logger.info("worker.started")
 
         worker = RabbitMQOutboxWorker(
             session_factory=async_session_factory,
@@ -38,7 +36,7 @@ async def main() -> None:
     finally:
         await connection.close()
         await async_engine.dispose()
-        logger.info("Outbox publisher stopped")
+        logger.info("worker.stopped")
 
 
 if __name__ == "__main__":

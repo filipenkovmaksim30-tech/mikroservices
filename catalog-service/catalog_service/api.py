@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from catalog_service.observability import install_http_logging
 from catalog_service.db.session import async_engine
 from catalog_service.exceptions import (
     InsufficientStockError,
@@ -71,6 +72,7 @@ async def handle_permission_denied(
     )
 
 
+install_http_logging(app)
 app.include_router(products_router)
 app.include_router(admin_products_router)
 

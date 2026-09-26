@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from payment_service.observability import install_http_logging
 from payment_service.db.session import async_engine
 from payment_service.exceptions import (
     InvalidAccessTokenError, 
@@ -73,4 +74,5 @@ async def handle_permission_denied(
         content={"detail": str(exc)},
     )
 
+install_http_logging(app)
 app.include_router(payment_router)

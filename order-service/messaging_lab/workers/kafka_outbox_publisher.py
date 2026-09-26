@@ -1,4 +1,5 @@
 import asyncio
+from messaging_lab.observability import configure_logging
 import logging
 
 from messaging_lab.config import Settings
@@ -10,21 +11,18 @@ logger = logging.getLogger(__name__)
 
 
 async def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    configure_logging()
 
     settings = Settings()
     kafka_producer = KafkaEventProducer(settings.kafka_bootstrap_servers)
     producer_started = False
 
-    logger.info("Starting Kafka outbox publisher")
+    logger.info("worker.starting")
 
     try:
         await kafka_producer.start()
         producer_started = True
-        logger.info("Kafka producer connected; outbox worker is running")
+        logger.info("worker.started")
 
         worker = KafkaOutboxWorker(
             session_factory=async_session_factory,
@@ -39,7 +37,7 @@ async def main() -> None:
         if producer_started:
             await kafka_producer.stop()
         await async_engine.dispose()
-        logger.info("Kafka outbox publisher stopped")
+        logger.info("worker.stopped")
 
 
 if __name__ == "__main__":

@@ -1,4 +1,5 @@
 import asyncio
+from messaging_lab.observability import configure_logging
 
 from functools import partial
 
@@ -24,6 +25,7 @@ from messaging_lab.services.notifications import NotificationService
 
 
 async def main() -> None:
+    configure_logging()
     settings = Settings()
     connection = await connect_rabbitmq(url=settings.rabbitmq_url)
     try:

@@ -31,9 +31,8 @@ async def retry_or_send_to_dlq(
 ) -> None:
     if retry_count >= MAX_RETRY_ATTEMPTS:
         logger.error(
-            "Notification retries exhausted: event_id=%s retry_count=%s",
-            event.event_id,
-            retry_count,
+            "message.rejected_retry_exhausted",
+            extra={"event_id": event.event_id, "retry_count": retry_count},
         )
         await message.reject(requeue=False)
         return
@@ -51,17 +50,16 @@ async def retry_or_send_to_dlq(
         )
     except Exception:
         logger.exception(
-            "Failed to publish notification to retry queue: message_id=%s",
-            message.message_id,
+            "message.retry_publish_failed",
+            extra={"event_id": event.event_id},
         )
         await message.reject(requeue=False)
         return
 
     await message.ack()
-    logger.info(
-        "Notification scheduled for retry: event_id=%s retry_count=%s",
-        event.event_id,
-        next_retry_count,
+    logger.warning(
+        "message.retry_scheduled",
+        extra={"event_id": event.event_id, "retry_count": next_retry_count},
     )
 
 
@@ -94,20 +92,13 @@ async def handle_notification(
 ) -> None:
     try:
         event = NOTIFICATION_EVENT_ADAPTER.validate_json(message.body)
-    except ValidationError as exc:
-        logger.warning(
-            "Permanent notification validation error: message_id=%s errors=%s",
-            message.message_id,
-            exc.error_count(),
-        )
+    except ValidationError:
+        logger.error("message.validation_failed", extra={"message_id": message.message_id})
 
         await message.reject(requeue=False)
         return
     except Exception:
-        logger.exception(
-            "Unexpected notification message parsing error: message_id=%s",
-            message.message_id,
-        )
+        logger.exception("message.parse_failed", extra={"message_id": message.message_id})
         await message.reject(requeue=False)
         return
 
@@ -118,9 +109,8 @@ async def handle_notification(
             raise ValueError
     except (ValueError, TypeError, UnicodeDecodeError):
         logger.error(
-            "Invalid retry header: message_id=%s value=%r",
-            message.message_id,
-            raw_retry_count,
+            "message.rejected_invalid_retry",
+            extra={"event_id": event.event_id, "message_id": message.message_id},
         )
         await message.reject(requeue=False)
         return
@@ -133,23 +123,27 @@ async def handle_notification(
         )
 
         if not processed:
-            logger.info("Duplicate notification skipped: event_id=%s", event.event_id)
+            logger.info("message.duplicate", extra={"event_id": event.event_id})
         else:
             logger.info(
-                "Notification sent: event_type=%s event_id=%s order_id=%s",
-                event.event_type,
-                event.event_id,
-                event.payload.order_id,
+                "notification.sent",
+                extra={
+                    "event_type": event.event_type,
+                    "event_id": event.event_id,
+                    "order_id": event.payload.order_id,
+                },
             )
-    except PermanentNotificationError as exc:
-        logger.error("Permanent notification error: event_id=%s error=%s", event.event_id, exc)
+    except PermanentNotificationError:
+        logger.error(
+            "message.rejected_business_error",
+            extra={"event_id": event.event_id, "order_id": event.payload.order_id},
+        )
         await message.reject(requeue=False)
         return
-    except TransientNotificationError as exc:
+    except TransientNotificationError:
         logger.warning(
-            "Transient notification error: event_id=%s error=%s",
-            event.event_id,
-            exc,
+            "message.processing_retry",
+            extra={"event_id": event.event_id},
         )
         await retry_or_send_to_dlq(
             message=message,
@@ -159,10 +153,7 @@ async def handle_notification(
         )
         return
     except Exception:
-        logger.exception(
-            "Unexpected notification processing error: message_id=%s",
-            message.message_id,
-        )
+        logger.exception("message.processing_retry", extra={"event_id": event.event_id})
         await retry_or_send_to_dlq(
             message=message,
             retry_exchange=retry_exchange,

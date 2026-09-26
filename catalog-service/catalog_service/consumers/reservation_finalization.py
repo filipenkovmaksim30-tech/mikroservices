@@ -33,17 +33,11 @@ async def handle_finalization_requested(
         event = STOCK_FINALIZATION_ADAPTER.validate_json(message.body)
 
     except ValidationError:
-        logger.exception(
-            "Permanent validation reservation finalization error: message_id=%s",
-            message.message_id,
-        )
+        logger.error("message.validation_failed", extra={"message_id": message.message_id})
         await message.reject(requeue=False)
         return
     except Exception:
-        logger.exception(
-            "Unexpected reservation_finalization message parsing error: message_id=%s",
-            message.message_id,
-        )
+        logger.exception("message.parse_failed", extra={"message_id": message.message_id})
         await message.reject(requeue=False)
         return
 
@@ -60,17 +54,18 @@ async def handle_finalization_requested(
                 consumer_name=consumer_name,
             )
 
-            await service.process(event)
+            processed = await service.process(event)
 
     except PermanentStockReservationFinalizationError:
-        logger.exception(
-            "Permanent reservation finalization error: message_id=%s",
-            message.message_id,
+        logger.error(
+            "message.rejected_business_error",
+            extra={"event_id": event.event_id, "order_id": event.payload.order_id},
         )
         await message.reject(requeue=False)
         return
 
     except (SQLAlchemyError, OSError):
+        logger.warning("message.processing_retry", extra={"event_id": event.event_id})
         await retry_or_send_to_dlq(
             message=message,
             retry_exchange=retry_exchange,
@@ -81,10 +76,7 @@ async def handle_finalization_requested(
         return
 
     except Exception:
-        logger.exception(
-            "Unexpected stock reservation finalization processing error: message_id=%s",
-            message.message_id,
-        )
+        logger.exception("message.processing_retry", extra={"event_id": event.event_id})
         await retry_or_send_to_dlq(
             message=message,
             retry_exchange=retry_exchange,
@@ -95,3 +87,16 @@ async def handle_finalization_requested(
         return
 
     await message.ack()
+    logger.info(
+        "reservation.status_changed" if processed else "message.duplicate",
+        extra={
+            "event_id": event.event_id,
+            "event_type": event.event_type,
+            "order_id": event.payload.order_id,
+            "target_status": (
+                "confirmed"
+                if event.event_type == "stock.reservation.confirm.requested"
+                else "released"
+            ) if processed else None,
+        },
+    )

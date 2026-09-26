@@ -1,3 +1,4 @@
+import logging
 import httpx
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -5,6 +6,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from messaging_lab.observability import install_http_logging
 from messaging_lab.config import Settings
 from messaging_lab.db.session import async_engine
 from messaging_lab.exceptions import (
@@ -23,6 +25,7 @@ from messaging_lab.routers.orders import limiter
 from messaging_lab.routers.orders import router as orders_router
 from messaging_lab.routers.admin_orders import router as admin_orders_router
 
+logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -112,6 +115,7 @@ async def handle_invalid_catalog_response(
     request: Request,
     exc: InvalidCatalogResponseError,
 ) -> JSONResponse:
+    logger.error("catalog.invalid_response")
     return JSONResponse(
         status_code=status.HTTP_502_BAD_GATEWAY,
         content={"detail": str(exc)},
@@ -122,10 +126,12 @@ async def handle_unavaible_catalog(
     request: Request,
     exc: CatalogUnavailableError,
 ) -> JSONResponse:
+    logger.warning("catalog.unavailable")
     return JSONResponse(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         content={"detail": str(exc)},
     )
 
+install_http_logging(app)
 app.include_router(orders_router)
 app.include_router(admin_orders_router)

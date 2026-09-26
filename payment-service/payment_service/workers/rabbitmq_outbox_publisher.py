@@ -1,4 +1,5 @@
 import asyncio
+from payment_service.observability import configure_logging
 import logging
 
 
@@ -15,19 +16,16 @@ logger = logging.getLogger(__name__)
 
 
 async def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    configure_logging()
     
-    logger.info("Starting outbox publisher")
+    logger.info("worker.starting")
     settings = Settings()
     connection = await connect_rabbitmq(url=settings.rabbitmq_url)
     try:
 
         channel = await declare_channel(connection)
         payment_events_exchange = await declare_payment_events_exchange(channel)
-        logger.info("RabbitMQ topology declared; outbox worker is running")
+        logger.info("worker.started")
 
         worker = RabbitMQOutboxWorker(
             session_factory=async_session_factory,
@@ -40,7 +38,7 @@ async def main() -> None:
     finally:
         await connection.close()
         await async_engine.dispose()
-        logger.info("Outbox publisher stopped")
+        logger.info("worker.stopped")
     
 
 

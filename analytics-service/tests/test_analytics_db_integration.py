@@ -14,6 +14,8 @@ from analytics_service.messaging.contract import (
     AnalyticsEventEnvelope,
     AnalyticsOrderPaidEnvelopeV1,
     AnalyticsOrderPaidV1,
+    AnalyticsOrderPaymentFailedEnvelopeV1,
+    AnalyticsOrderPaymentFailedV1,
     OrderCreatedAnalyticsV1,
 )
 from analytics_service.repositories.analytics_order import AnalyticsOrderRepository
@@ -257,3 +259,38 @@ async def test_mismatched_payment_rolls_back_processed_event(
             .where(ProcessedEvent.event_id == mismatched.event_id)
         )
     assert processed_count == 0
+
+async def test_failed_payment_does_not_increase_revenue(
+    db_session: AsyncSession,
+) -> None:
+    now = datetime.now(UTC)
+    order_id, customer_id = uuid4(), uuid4()
+
+    assert await creation_service(db_session).process(
+        created_event(order_id, customer_id, now)
+    )
+
+    failed_event = AnalyticsOrderPaymentFailedEnvelopeV1(
+        event_id=uuid4(),
+        occurred_at=now,
+        correlation_id=order_id,
+        payload=AnalyticsOrderPaymentFailedV1(
+            order_id=order_id,
+            customer_id=customer_id,
+            total_amount=Decimal("100.00"),
+            currency="RUB",
+            failed_at=now,
+            failure_code="card_declined",
+        ),
+    )
+    assert await payment_service(db_session).process(failed_event)
+
+    summary = await AnalyticsOrderService(
+        AnalyticsOrderRepository(db_session), db_session
+    ).get_summary(now - timedelta(days=1), now + timedelta(days=1))
+
+    assert summary.orders_count == 1
+    assert summary.payment_failed_count == 1
+    assert summary.paid_orders_count == 0
+    assert summary.revenue == Decimal("0")
+    assert summary.items_quantity == 0

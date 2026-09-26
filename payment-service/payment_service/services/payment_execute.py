@@ -1,4 +1,5 @@
 
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID, uuid4
 
@@ -10,6 +11,8 @@ from payment_service.services.payment_provider import PaymentProvider
 from payment_service.messaging.contracts import PaymentFailedV1, PaymentSucceededV1
 from payment_service.db.models.payments import Payment, PaymentStatus
 from payment_service.db.models.payments_outbox import RabbitMQOutboxEvent
+
+logger = logging.getLogger(__name__)
 
 class PaymentExecuteService:
     def __init__(
@@ -143,4 +146,12 @@ class PaymentExecuteService:
                 failed_event = self._build_payment_failed_event(payment)
                 await self._outbox_repository.add(failed_event)
             
+        logger.info(
+            "payment.status_changed",
+            extra={
+                "payment_id": payment.id,
+                "order_id": payment.order_id,
+                "target_status": payment.status.value,
+            },
+        )
         return True

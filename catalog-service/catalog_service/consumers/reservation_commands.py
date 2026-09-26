@@ -30,20 +30,16 @@ async def handle_reservation_requested(
     try:
         event = StockReservationRequestedEnvelopeV1.model_validate_json(message.body)
 
-    except ValidationError as exc:
+    except ValidationError:
         logger.error(
-            "Permanent message validation error: message_id=%s errors=%s",
-            message.message_id,
-            exc.error_count(),
+            "message.validation_failed",
+            extra={"message_id": message.message_id},
         )
         await message.reject(requeue=False)
         return
 
     except Exception:
-        logger.exception(
-            "Unexpected reservation_commands message parsing error: message_id=%s",
-            message.message_id,
-        )
+        logger.exception("message.parse_failed", extra={"message_id": message.message_id})
         await message.reject(requeue=False)
         return
 
@@ -62,9 +58,10 @@ async def handle_reservation_requested(
                 consumer_name=consumer_name,
             )
 
-            await service.process(event)
+            processed = await service.process(event)
 
     except (SQLAlchemyError, OSError):
+        logger.warning("message.processing_retry", extra={"event_id": event.event_id})
         await retry_or_send_to_dlq(
             message=message,
             retry_exchange=retry_exchange,
@@ -75,10 +72,7 @@ async def handle_reservation_requested(
         return
 
     except Exception:
-        logger.exception(
-            "Unexpected stock reservation commands processing error: message_id=%s",
-            message.message_id,
-        )
+        logger.exception("message.processing_retry", extra={"event_id": event.event_id})
         await retry_or_send_to_dlq(
             message=message,
             retry_exchange=retry_exchange,
@@ -89,3 +83,11 @@ async def handle_reservation_requested(
         return
 
     await message.ack()
+    logger.info(
+        "message.processed" if processed else "message.duplicate",
+        extra={
+            "event_id": event.event_id,
+            "event_type": event.event_type,
+            "order_id": event.payload.order_id,
+        },
+    )

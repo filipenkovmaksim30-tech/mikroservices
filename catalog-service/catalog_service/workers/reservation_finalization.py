@@ -1,4 +1,5 @@
 import asyncio
+from catalog_service.observability import configure_logging
 import logging
 
 from functools import partial
@@ -31,10 +32,7 @@ RESERVATION_FINALIZATION_CONSUMER = "catalog-service.stock-reservation-finalizat
 
 
 async def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    configure_logging()
 
     settings = Settings()
     connection = await connect_rabbitmq(settings.rabbitmq_url)
@@ -56,7 +54,7 @@ async def main() -> None:
         finalization_retry_queue = await declare_reservation_finalization_retry_queue(channel)
         await bind_reservation_finalization_retry_queue(finalization_retry_exchange, finalization_retry_queue)
 
-        logger.info("Reservation finalization topology was declared")
+        logger.info("worker.topology_ready")
 
         consumer_callback = partial(
             handle_finalization_requested,
@@ -66,7 +64,7 @@ async def main() -> None:
         )
         
         await finalization_queue.consume(consumer_callback, no_ack=False)
-        logger.info("Reservation commands consumer started")
+        logger.info("worker.started")
         await asyncio.Future()
 
     finally:

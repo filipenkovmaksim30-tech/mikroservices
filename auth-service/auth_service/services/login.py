@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -11,6 +12,7 @@ from auth_service.security.tokens import TokenService
 from auth_service.services.authentication import AuthenticationService
 from auth_service.services.token_result import IssuedTokens
 
+logger = logging.getLogger(__name__)
 
 class LoginService:
     def __init__(
@@ -45,6 +47,7 @@ class LoginService:
         async with self._session.begin():
             await self._refresh_repository.add(refresh_session)
 
+        logger.info("auth.login_succeeded", extra={"user_id": user.id})
         
         return IssuedTokens(
             token_response=TokenResponse(

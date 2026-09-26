@@ -22,21 +22,19 @@ async def retry_or_send_to_dlq(
         if retry_count < 0:
             raise ValueError()
     except (TypeError, ValueError, UnicodeDecodeError):
-        logger.error(
-            "Invalid retry header: message_id=%s value=%r",
-            message.message_id,
-            raw_retry_count,
-        )
         await message.reject(requeue=False)
+        logger.error(
+            "message.rejected_invalid_retry",
+            extra={"event_id": event_id, "message_id": message.message_id},
+        )
         return
 
     if retry_count >= MAX_RETRY_ATTEMPTS:
-        logger.error(
-            "Retry attempts exhausted: message_id=%s retry_count=%s",
-            message.message_id,
-            retry_count,
-        )
         await message.reject(requeue=False)
+        logger.error(
+            "message.rejected_retry_exhausted",
+            extra={"event_id": event_id, "retry_count": retry_count},
+        )
         return
 
     next_retry_count = retry_count + 1
@@ -51,11 +49,12 @@ async def retry_or_send_to_dlq(
             headers={"x-retry-count": next_retry_count},
         )
     except Exception:
-        logger.exception(
-            "Failed to publish catalog message to retry queue: message_id=%s",
-            message.message_id,
-        )
+        logger.exception("message.retry_publish_failed", extra={"event_id": event_id})
         await message.reject(requeue=False)
         return
 
     await message.ack()
+    logger.warning(
+        "message.retry_scheduled",
+        extra={"event_id": event_id, "retry_count": next_retry_count},
+    )

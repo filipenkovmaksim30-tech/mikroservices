@@ -1,4 +1,4 @@
-
+import logging
 
 from datetime import UTC, datetime
 
@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from auth_service.repositories.refresh_sessions import RefreshSessionRepository
 from auth_service.security.refresh_tokens import hash_refresh_token
 
+logger = logging.getLogger(__name__)
 class LogoutService:
     def __init__(
         self,
@@ -31,4 +32,4 @@ class LogoutService:
                 family_id=refresh_session.family_id,
                 revoked_at=now,
             )
-    
+        logger.info("auth.logout_succeeded", extra={"user_id": refresh_session.user_id})

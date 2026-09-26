@@ -1,3 +1,4 @@
+import logging
 import enum
 from datetime import UTC, datetime
 
@@ -20,6 +21,7 @@ from auth_service.security.refresh_tokens import (
 from auth_service.security.tokens import TokenService
 from auth_service.services.token_result import IssuedTokens
 
+logger = logging.getLogger(__name__)
 
 class _RefreshFailure(enum.Enum):
     REUSE_DETECTED = enum.auto()
@@ -138,9 +140,12 @@ class RefreshService:
         )
 
         if isinstance(result, IssuedTokens):
+            logger.info("auth.refresh_succeeded")
             return result
 
         if result is _RefreshFailure.REUSE_DETECTED:
+            logger.warning("auth.refresh_reuse_detected")
             raise RefreshTokenReuseError()
 
+        logger.warning("auth.refresh_blocked_user")
         raise UserBlockedError()

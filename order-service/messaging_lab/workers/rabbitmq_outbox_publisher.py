@@ -1,4 +1,5 @@
 import asyncio
+from messaging_lab.observability import configure_logging
 import logging
 
 from messaging_lab.config import Settings
@@ -25,12 +26,9 @@ logger = logging.getLogger(__name__)
 
 
 async def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    configure_logging()
 
-    logger.info("Starting outbox publisher")
+    logger.info("worker.starting")
     settings = Settings()
     connection = await connect_rabbitmq(url=settings.rabbitmq_url)
 
@@ -40,7 +38,7 @@ async def main() -> None:
         payment_exchange = await declare_payment_commands_exchange(channel)
         notifications_exchange = await declare_order_events_exchange(channel)
 
-        logger.info("RabbitMQ topology declared; outbox worker is running")
+        logger.info("worker.started")
 
         exchanges_by_event_type={
             PAYMENT_REQUESTED_ROUTING_KEY: payment_exchange,
@@ -61,7 +59,7 @@ async def main() -> None:
     finally:
         await connection.close()
         await async_engine.dispose()
-        logger.info("Outbox publisher stopped")
+        logger.info("worker.stopped")
 
 
 if __name__ == "__main__":

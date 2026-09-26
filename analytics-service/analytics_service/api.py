@@ -5,6 +5,7 @@ from analytics_service.exceptions import InvalidAccessTokenError, OrderNotFoundE
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
+from analytics_service.observability import install_http_logging
 from analytics_service.db.session import async_engine
 
 from analytics_service.routers.analytics_order import router as analytics_router
@@ -68,4 +69,5 @@ async def handle_order_validation_error(
     )
 
 
+install_http_logging(app)
 app.include_router(analytics_router)

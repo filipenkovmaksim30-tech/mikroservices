@@ -111,3 +111,52 @@ async def test_stale_worker_cannot_finalize_payment() -> None:
     payments.mark_succeeded.assert_not_awaited()
     payments.mark_failed.assert_not_awaited()
     outbox.add.assert_not_awaited()
+
+async def test_failed_charge_writes_payment_failed_outbox() -> None:
+    payment = pending_payment()
+    session = TrackingSession()
+
+    async def claim(*, processing_token: object, **kwargs: object) -> Payment:
+        payment.status = PaymentStatus.PROCESSING
+        payment.processing_token = processing_token
+        return payment
+
+    async def mark_failed(
+        *, payment: Payment, failure_code: str, completed_at: datetime,
+    ) -> Payment:
+        payment.status = PaymentStatus.FAILED
+        payment.failure_code = failure_code
+        payment.completed_at = completed_at
+
+        return payment
+
+    payments = SimpleNamespace(
+        claim_for_processing=AsyncMock(side_effect=claim),
+        get_by_id_for_update=AsyncMock(return_value=payment),
+        mark_succeeded=AsyncMock(),
+        mark_failed=AsyncMock(side_effect=mark_failed),
+    )
+
+    outbox = SimpleNamespace(add=AsyncMock())
+    provider = SimpleNamespace(
+        charge=AsyncMock(
+            return_value=PaymentResult(
+                succeeded=False,
+                failure_code="card_declined"
+            )
+        )
+    )
+    service = PaymentExecuteService(session, outbox, payments, provider, 30)
+
+    assert await service.execute(payment.id) is True
+
+    assert session.started_transactions == 2
+    payments.mark_failed.assert_awaited_once()
+    payments.mark_succeeded.assert_not_awaited()
+    provider.charge.assert_awaited_once()
+
+    event = outbox.add.await_args.args[0]
+    assert event.event_type == "payment.failed"
+    assert event.payload["order_id"] == str(payment.order_id)
+    assert event.payload["failure_code"] == "card_declined"
+

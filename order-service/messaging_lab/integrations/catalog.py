@@ -13,6 +13,7 @@ from messaging_lab.exceptions import (
     InvalidCatalogResponseError,
     CatalogUnavailableError,
 )
+from messaging_lab.observability import current_request_id
 
 
 class CatalogClient:
@@ -27,6 +28,11 @@ class CatalogClient:
             response = await self._http_client.post(
                 "/products/batch",
                 json=request_data.model_dump(mode="json"),
+                headers=(
+                    {"X-Request-ID": request_id}
+                    if (request_id := current_request_id()) is not None
+                    else None
+                ),
             )
         except httpx.RequestError as exc:
             raise CatalogUnavailableError() from exc

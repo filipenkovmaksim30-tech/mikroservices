@@ -76,6 +76,14 @@ class RabbitMQOutboxPublisher:
                     message_id=str(event.event_id),
                     correlation_id=str(event.correlation_id),
                 )
+                logger.info(
+                    "outbox.broker_confirmed",
+                    extra={
+                        "event_id": event.event_id,
+                        "event_type": event.event_type,
+                        "order_id": event.correlation_id,
+                    },
+                )
                 await self._outbox_repository.mark_as_published(event, datetime.now(UTC))
             return len(events)
 
@@ -113,13 +121,10 @@ class RabbitMQOutboxWorker:
                     published_count = await outbox_publisher.publish_batch()
 
             except asyncio.CancelledError:
-                logger.info("RabbitMQ Outbox worker cancellation requested")
+                logger.info("worker.cancelled")
                 raise
             except Exception:
-                logger.exception(
-                    "RabbitMQ Outbox batch failed; retrying in %.2f seconds",
-                    self._outbox_poll_interval_seconds,
-                )
+                logger.exception("worker.batch_failed")
                 await asyncio.sleep(self._outbox_poll_interval_seconds)
                 continue
             if published_count == 0:

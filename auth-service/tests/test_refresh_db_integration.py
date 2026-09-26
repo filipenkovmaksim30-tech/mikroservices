@@ -16,6 +16,7 @@ from auth_service.exceptions import (
     InvalidCredentialsError,
     InvalidRefreshTokenError,
     RefreshTokenReuseError,
+    UserBlockedError,
 )
 from auth_service.repositories.refresh_sessions import RefreshSessionRepository
 from auth_service.repositories.users import UserRepository
@@ -180,3 +181,22 @@ async def test_wrong_password_is_rejected(db_session: AsyncSession) -> None:
 
     with pytest.raises(InvalidCredentialsError):
         await service.authenticate(email=user.email, password="wrong12345")
+
+async def test_blocked_user_cannot_refresh(
+    db_session: AsyncSession,
+) -> None:
+    user, old_session, raw_token = await seeded_session(db_session)
+
+    async with db_session.begin():
+        user.status = UserStatus.BLOCKED
+
+    with pytest.raises(UserBlockedError):
+        await refresh_service(db_session).refresh(raw_token)
+
+    async with db_session.begin():
+        stored = await RefreshSessionRepository(
+            db_session
+        ).get_by_token_hash_for_update(old_session.token_hash)
+
+    assert stored.revoked_at is not None
+    assert stored.replaced_by_session_id is None

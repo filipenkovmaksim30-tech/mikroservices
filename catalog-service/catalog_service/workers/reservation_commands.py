@@ -1,4 +1,5 @@
 import asyncio
+from catalog_service.observability import configure_logging
 import logging
 from functools import partial
 
@@ -28,10 +29,7 @@ RESERVATION_REQUESTED_CONSUMER = "catalog-service.stock-reservation-requested.v1
 
 
 async def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    configure_logging()
 
     settings = Settings()
     connection = await connect_rabbitmq(settings.rabbitmq_url)
@@ -61,7 +59,7 @@ async def main() -> None:
         )
 
         await commands_queue.consume(consumer_callback, no_ack=False)
-        logger.info("Reservation commands consumer started")
+        logger.info("worker.started")
         await asyncio.Future()
 
     finally:

@@ -41,21 +41,19 @@ async def retry_or_send_to_dlq(
         if retry_count < 0:
             raise ValueError
     except (TypeError, ValueError, UnicodeDecodeError):
-        logger.error(
-            "Invalid retry header: message_id=%s value=%r",
-            message.message_id,
-            raw_retry_count,
-        )
         await message.reject(requeue=False)
+        logger.error(
+            "message.rejected_invalid_retry",
+            extra={"event_id": event_id, "message_id": message.message_id},
+        )
         return
 
     if retry_count >= MAX_RETRY_ATTEMPTS:
-        logger.error(
-            "Retry attempts exhausted: message_id=%s retry_count=%s",
-            message.message_id,
-            retry_count,
-        )
         await message.reject(requeue=False)
+        logger.error(
+            "message.rejected_retry_exhausted",
+            extra={"event_id": event_id, "retry_count": retry_count},
+        )
         return
     
     next_retry_count = retry_count + 1
@@ -72,14 +70,15 @@ async def retry_or_send_to_dlq(
             },
         )
     except Exception:
-        logger.exception(
-            "Failed to publish payment result message to retry queue: message_id=%s",
-            message.message_id,
-        )
+        logger.exception("message.retry_publish_failed", extra={"event_id": event_id})
         await message.reject(requeue=False)
         return
     
     await message.ack()
+    logger.warning(
+        "message.retry_scheduled",
+        extra={"event_id": event_id, "retry_count": next_retry_count},
+    )
 
 async def handler_payment_result(
     message: AbstractIncomingMessage,
@@ -91,14 +90,12 @@ async def handler_payment_result(
         event = PAYMENT_RESULT_ADAPTER.validate_json(message.body)
 
     except ValidationError:
+        logger.error("message.validation_failed", extra={"message_id": message.message_id})
         await message.reject(requeue=False)
         return
 
     except Exception:
-        logger.exception(
-            "Unexpected payment_result message parsing error: message_id=%s",
-            message.message_id,
-        )
+        logger.exception("message.parse_failed", extra={"message_id": message.message_id})
         await message.reject(requeue=False)
         return
     
@@ -118,22 +115,18 @@ async def handler_payment_result(
             )
 
         
-            await service.process(event=event)
+            processed = await service.process(event=event)
 
-    except PermanentPaymentResultError as exc:
+    except PermanentPaymentResultError:
         logger.error(
-            "Permanent payment result error: message_id=%s error=%s",
-            message.message_id,
-            exc,
+            "message.rejected_business_error",
+            extra={"event_id": event.event_id, "order_id": event.payload.order_id},
         )
         await message.reject(requeue=False)
         return 
 
     except (OrderNotFoundError, SQLAlchemyError, OSError):
-        logger.exception(
-            "Temporary payment result error: message_id=%s",
-            message.message_id,
-        )
+        logger.exception("message.processing_retry", extra={"event_id": event.event_id})
         await retry_or_send_to_dlq(
             message=message,
             retry_exchange=retry_exchange,
@@ -144,10 +137,7 @@ async def handler_payment_result(
         return
 
     except Exception:
-        logger.exception(
-            "Unexpected payment result error: message_id=%s",
-            message.message_id,
-        )
+        logger.exception("message.processing_retry", extra={"event_id": event.event_id})
         await retry_or_send_to_dlq(
             message=message,
             retry_exchange=retry_exchange,
@@ -158,3 +148,14 @@ async def handler_payment_result(
         return
 
     await message.ack()
+    logger.info(
+        "order.status_changed" if processed else "message.duplicate",
+        extra={
+            "event_id": event.event_id,
+            "event_type": event.event_type,
+            "order_id": event.payload.order_id,
+            "target_status": (
+                "paid" if event.event_type == "payment.succeeded" else "payment_failed"
+            ) if processed else None,
+        },
+    )

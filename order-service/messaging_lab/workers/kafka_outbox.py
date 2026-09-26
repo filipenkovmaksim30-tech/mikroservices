@@ -84,6 +84,15 @@ class KafkaOutboxPublisher:
                 body = self._serialize_event(event)
                 key = str(event.aggregate_id).encode("utf-8")
                 await self._kafka_producer.publish(topic=self._topic, key=key, value=body)
+                logger.info(
+                    "outbox.broker_confirmed",
+                    extra={
+                        "event_id": event.event_id,
+                        "event_type": event.event_type,
+                        "order_id": event.aggregate_id,
+                        "topic": self._topic,
+                    },
+                )
                 await self._kafka_outbox_repository.mark_as_published(
                     event=event, published_at=datetime.now(UTC)
                 )
@@ -125,13 +134,10 @@ class KafkaOutboxWorker:
                     )
                     published_count = await kafka_outbox_publisher.publish_batch()
             except asyncio.CancelledError:
-                logger.info("Kafka Outbox worker cancellation requested")
+                logger.info("worker.cancelled")
                 raise
             except Exception:
-                logger.exception(
-                    "Kafka Outbox batch failed; retrying in %.2f seconds",
-                    self._outbox_poll_interval_seconds,
-                )
+                logger.exception("worker.batch_failed")
                 await asyncio.sleep(self._outbox_poll_interval_seconds)
                 continue
 

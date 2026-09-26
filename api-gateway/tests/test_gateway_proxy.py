@@ -235,3 +235,25 @@ async def test_logout_forwards_cookie(
 
     assert response.status_code == 200
     assert requests[0].headers["cookie"] == "refresh_token=original"
+
+async def test_upstream_429_forwards_retry_after(
+    gateway: tuple[httpx.AsyncClient, list[httpx.Request]],
+) -> None:
+    from api_gateway.main import app
+    from api_gateway.routers.dependencies import get_http_client
+
+    client, _ = gateway
+    upstream = AsyncMock()
+    upstream.request.return_value = httpx.Response(
+        429,
+        json={"detail": "Too many requests"},
+        headers={"Retry-After": "60"},
+    )
+    app.dependency_overrides[get_http_client] = lambda: upstream
+
+    response = await client.get("/api/products")
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "60"
+    assert response.json() == {"detail": "Too many requests"}
+    upstream.request.assert_awaited_once()

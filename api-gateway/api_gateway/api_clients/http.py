@@ -2,6 +2,7 @@ import httpx
 from fastapi import Response
 
 from api_gateway.config import Settings
+from api_gateway.observability import current_request_id
 
 FORWARDED_RESPONSE_HEADERS = (
     "content-type",
@@ -43,7 +44,10 @@ async def request_upstream(
     cookies: dict[str, str] | None = None,
     headers: dict[str, str] | None = None
 ) -> httpx.Response:
-
+    request_id = current_request_id()
+    forwarded_headers = dict(headers or {})
+    if request_id is not None:
+        forwarded_headers["X-Request-ID"] = request_id
     return await client.request(
         method=method,
         url=url,
@@ -51,7 +55,7 @@ async def request_upstream(
         json=json_body,
         data=form_data,
         cookies=cookies,
-        headers=headers
+        headers=forwarded_headers
     )
 
 def build_gateway_response(

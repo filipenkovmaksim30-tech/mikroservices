@@ -1,4 +1,5 @@
 import asyncio
+from messaging_lab.observability import configure_logging
 from functools import partial
 
 from messaging_lab.config import Settings
@@ -23,6 +24,7 @@ from messaging_lab.messaging.rabbitmq.topology.payment_result import (
 
 
 async def main() -> None:
+    configure_logging()
     settings = Settings()
     connection = await connect_rabbitmq(url=settings.rabbitmq_url)
     try:

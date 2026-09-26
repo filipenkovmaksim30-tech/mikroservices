@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from catalog_service.exceptions import InsufficientStockError, ProductNotFoundError
 from catalog_service.repositories.products import ProductRepository
-from catalog_service.schemas.products import ProductCreate
+from catalog_service.schemas.products import ProductCreate, ProductUpdate
 from catalog_service.services.products import ProductsService
 from tests.test_reservations_db_integration import product
 
@@ -69,3 +69,23 @@ async def test_deactivate_then_activate_product(db_session: AsyncSession) -> Non
 async def test_activate_unknown_product_raises(db_session: AsyncSession) -> None:
     with pytest.raises(ProductNotFoundError):
         await service(db_session).activate_product(uuid4())
+
+async def test_partial_update_preserves_omitted_fields(
+    db_session: AsyncSession,
+) -> None:
+    item = product(5)
+    async with db_session.begin():
+        await ProductRepository(db_session).add(item)
+
+    await service(db_session).update_product(
+        item.id,
+        ProductUpdate(name="Updated book"),
+    )
+    loaded = await service(db_session).get_product_by_id(item.id)
+
+    assert loaded.name == "Updated book"
+    assert loaded.category == "books"
+    assert loaded.description is None
+    assert loaded.price == Decimal("100.00")
+    assert loaded.stock_quantity == 5
+    assert loaded.is_active is True

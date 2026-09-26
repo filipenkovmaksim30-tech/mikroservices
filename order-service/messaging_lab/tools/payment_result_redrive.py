@@ -17,6 +17,7 @@ from messaging_lab.messaging.rabbitmq.topology.payment_result import (
     PAYMENT_RESULTS_DLQ,
     PAYMENT_RESULTS_REDELIVERY_ROUTING_KEY,
 )
+from messaging_lab.observability import configure_logging
 from messaging_lab.repositories.inbox import InboxRepository
 from messaging_lab.repositories.orders import OrderRepository
 from messaging_lab.services.payment_result_redrive import (
@@ -81,7 +82,7 @@ async def run_payment_result_redrive(
 
         message = await get_one_dlq_message(dlq)
         if message is None:
-            logger.info("Payment results DLQ is empty")
+            logger.info("redrive.dlq_empty")
             return
 
         try:
@@ -157,12 +158,12 @@ async def run_payment_result_redrive(
             event.payload.order_id,
         )
     except Exception:
-        logger.exception("Payment result DLQ redrive failed")
+        logger.exception("redrive.failed")
         if message is not None and not message.processed:
             try:
                 await message.nack(requeue=True)
             except Exception:
-                logger.exception("Failed to return unprocessed message to payment results DLQ")
+                logger.exception("redrive.return_to_dlq_failed")
         raise
     finally:
         try:
@@ -193,10 +194,7 @@ def parse_args() -> argparse.Namespace:
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    configure_logging()
     arguments = parse_args()
     asyncio.run(
         run_payment_result_redrive(

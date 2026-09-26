@@ -1,4 +1,5 @@
 import asyncio
+from payment_service.observability import configure_logging
 import logging
 
 from uuid import UUID
@@ -78,15 +79,16 @@ class PaymentExecutionWorker:
                         )
 
             except asyncio.CancelledError:
-                logger.info("Payment execution worker cancellation requested")
+                logger.info("worker.cancelled")
                 raise
             except Exception:
-                logger.exception("Failed to load pending payments")
+                logger.exception("worker.load_failed")
 
             await asyncio.sleep(self._poll_interval_seconds)
 
 
 async def main() -> None:
+    configure_logging()
     settings = Settings()
 
     try:

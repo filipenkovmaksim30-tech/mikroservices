@@ -14,6 +14,8 @@ from messaging_lab.messaging.contracts.payments import (
 from messaging_lab.messaging.contracts.stock_reservations import (
     StockReservedEnvelopeV1,
     StockReservedV1,
+    StockReservationFailedEnvelopeV1,
+    StockReservationFailedV1,
 )
 from messaging_lab.services.payment_result import PaymentResultService
 from messaging_lab.services.reservation_result import StockReservationResultService
@@ -156,3 +158,39 @@ async def test_failed_payment_releases_stock_and_emits_notifications() -> None:
     ]
     kafka_outbox.add.assert_awaited_once()
     assert kafka_outbox.add.await_args.args[0].event_type == "order.payment_failed"
+
+
+async def test_failed_stock_reservation_does_not_request_payment() -> None:
+    order = order_with_status(OrderStatus.PENDING_STOCK)
+    now = datetime.now(UTC)
+    event = StockReservationFailedEnvelopeV1(
+        event_id=uuid4(),
+        occurred_at=now,
+        correlation_id=order.id,
+        payload=StockReservationFailedV1(
+            order_id=order.id,
+            failure_code="insufficient_stock",
+            failed_product_ids={uuid4()},
+            failed_at=now,
+        ),
+    )
+    session = TrackingSession()
+    inbox = SimpleNamespace(try_add=AsyncMock(return_value=True))
+
+    async def mark_stock_failed(target: Order) -> None:
+        target.status = OrderStatus.STOCK_FAILED
+
+    orders = SimpleNamespace(
+        get_by_id_for_update=AsyncMock(return_value=order),
+        mark_stock_failed=AsyncMock(side_effect=mark_stock_failed),
+    )
+    outbox = SimpleNamespace(add=AsyncMock())
+    service = StockReservationResultService(
+        session, inbox, orders, outbox, "stock-results"
+    )
+
+    assert await service.process(event) is True
+
+    assert order.status is OrderStatus.STOCK_FAILED
+    orders.mark_stock_failed.assert_awaited_once_with(order)
+    outbox.add.assert_not_awaited()

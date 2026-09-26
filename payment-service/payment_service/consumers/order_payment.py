@@ -37,21 +37,19 @@ async def retry_or_send_to_dlq(
         if retry_count < 0:
             raise ValueError
     except (TypeError, UnicodeDecodeError, ValueError):
-        logger.error(
-            "Invalid retry header: message_id=%s value=%r",
-            message.message_id,
-            raw_retry_count,
-        )
         await message.reject(requeue=False)
+        logger.error(
+            "message.rejected_invalid_retry",
+            extra={"event_id": event_id, "message_id": message.message_id},
+        )
         return
 
     if retry_count >= MAX_RETRY_ATTEMPTS:
-        logger.error(
-            "Retry attempts exhausted: message_id=%s retry_count=%s",
-            message.message_id,
-            retry_count,
-        )
         await message.reject(requeue=False)
+        logger.error(
+            "message.rejected_retry_exhausted",
+            extra={"event_id": event_id, "retry_count": retry_count},
+        )
         return
 
     next_retry_count = retry_count + 1
@@ -66,14 +64,15 @@ async def retry_or_send_to_dlq(
             headers={"x-retry-count": next_retry_count},
         )
     except Exception:
-        logger.exception(
-            "Failed to publish payment message to retry queue: message_id=%s",
-            message.message_id,
-        )
+        logger.exception("message.retry_publish_failed", extra={"event_id": event_id})
         await message.reject(requeue=False)
         return
 
     await message.ack()
+    logger.warning(
+        "message.retry_scheduled",
+        extra={"event_id": event_id, "retry_count": next_retry_count},
+    )
 
 
 async def handle_payment_requested(
@@ -84,19 +83,15 @@ async def handle_payment_requested(
 ) -> None:
     try:
         event = PaymentRequestedEnvelope.model_validate_json(message.body)
-    except ValidationError as exc:
+    except ValidationError:
         logger.error(
-            "Permanent message validation error: message_id=%s errors=%s",
-            message.message_id,
-            exc.error_count(),
+            "message.validation_failed",
+            extra={"message_id": message.message_id},
         )
         await message.reject(requeue=False)
         return
     except Exception:
-        logger.exception(
-            "Unexpected payment message parsing error: message_id=%s",
-            message.message_id,
-        )
+        logger.exception("message.parse_failed", extra={"message_id": message.message_id})
         await message.reject(requeue=False)
         return
 
@@ -110,22 +105,18 @@ async def handle_payment_requested(
                 payment_repository=payment_repository,
                 consumer_name=consumer_name,
             )
-            await service.process(event)
+            processed = await service.process(event)
 
-    except PaymentRequestConflictError as exc:
+    except PaymentRequestConflictError:
         logger.error(
-            "Payment request conflict: message_id=%s error=%s",
-            message.message_id,
-            exc,
+            "message.rejected_business_error",
+            extra={"event_id": event.event_id, "order_id": event.payload.order_id},
         )
         await message.reject(requeue=False)
         return
 
     except (SQLAlchemyError, OSError):
-        logger.exception(
-            "Temporary order payment error: message_id=%s",
-            message.message_id,
-        )
+        logger.exception("message.processing_retry", extra={"event_id": event.event_id})
         await retry_or_send_to_dlq(
             message=message,
             retry_exchange=retry_exchange,
@@ -136,10 +127,7 @@ async def handle_payment_requested(
         return
 
     except Exception:
-        logger.exception(
-            "Unexpected order payment error: message_id=%s",
-            message.message_id,
-        )
+        logger.exception("message.processing_retry", extra={"event_id": event.event_id})
         await retry_or_send_to_dlq(
             message=message,
             retry_exchange=retry_exchange,
@@ -150,3 +138,11 @@ async def handle_payment_requested(
         return
 
     await message.ack()
+    logger.info(
+        "payment.request_recorded" if processed else "message.duplicate",
+        extra={
+            "event_id": event.event_id,
+            "event_type": event.event_type,
+            "order_id": event.payload.order_id,
+        },
+    )
