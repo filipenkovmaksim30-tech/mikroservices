@@ -9,7 +9,7 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from analytics_service.db.models import AnalyticsOrder, Base, ProcessedEvent
-from analytics_service.exceptions import OrderNotFoundError
+from analytics_service.exceptions import AnalyticsOrderDataMismatchError, OrderNotFoundError
 from analytics_service.messaging.contract import (
     AnalyticsEventEnvelope,
     AnalyticsOrderPaidEnvelopeV1,
@@ -184,3 +184,76 @@ async def test_payment_before_creation_does_not_poison_inbox(db_session: AsyncSe
     async with db_session.begin():
         order = await AnalyticsOrderRepository(db_session).get_by_order_id_for_update(order_id)
     assert order.paid_at is not None
+
+
+async def test_daily_summary_separates_created_days_and_counts_only_paid_items(
+    db_session: AsyncSession,
+) -> None:
+    first_day = datetime(2026, 1, 10, 12, tzinfo=UTC)
+    second_day = first_day + timedelta(days=1)
+    customer_id = uuid4()
+    paid_order_id = uuid4()
+    creator = creation_service(db_session)
+    assert await creator.process(
+        created_event(paid_order_id, customer_id, first_day, two_items=True)
+    )
+    assert await creator.process(created_event(uuid4(), customer_id, second_day))
+    assert await payment_service(db_session).process(
+        paid_event(paid_order_id, customer_id, Decimal("200.00"), second_day)
+    )
+
+    rows = await AnalyticsOrderService(
+        AnalyticsOrderRepository(db_session), db_session
+    ).get_daily_summary(first_day - timedelta(days=1), second_day + timedelta(days=1))
+
+    assert [(row.day, row.orders_count, row.paid_orders_count) for row in rows] == [
+        (first_day.date(), 1, 1),
+        (second_day.date(), 1, 0),
+    ]
+    assert rows[0].revenue == Decimal("200.00")
+    assert rows[0].items_quantity == 3
+    assert rows[1].revenue == Decimal("0")
+    assert rows[1].items_quantity == 0
+
+
+async def test_revenue_by_day_uses_payment_date_not_creation_date(
+    db_session: AsyncSession,
+) -> None:
+    created_at = datetime(2026, 2, 1, 12, tzinfo=UTC)
+    paid_at = created_at + timedelta(days=2)
+    order_id, customer_id = uuid4(), uuid4()
+    assert await creation_service(db_session).process(
+        created_event(order_id, customer_id, created_at)
+    )
+    assert await payment_service(db_session).process(
+        paid_event(order_id, customer_id, Decimal("100.00"), paid_at)
+    )
+
+    rows = await AnalyticsOrderService(
+        AnalyticsOrderRepository(db_session), db_session
+    ).get_revenue_by_day(created_at, paid_at + timedelta(days=1))
+
+    assert len(rows) == 1
+    assert rows[0].day == paid_at.date()
+    assert rows[0].paid_orders_count == 1
+    assert rows[0].revenue == Decimal("100.00")
+
+
+async def test_mismatched_payment_rolls_back_processed_event(
+    db_session: AsyncSession,
+) -> None:
+    now = datetime.now(UTC)
+    order_id, customer_id = uuid4(), uuid4()
+    assert await creation_service(db_session).process(created_event(order_id, customer_id, now))
+    mismatched = paid_event(order_id, uuid4(), Decimal("100.00"), now)
+
+    with pytest.raises(AnalyticsOrderDataMismatchError):
+        await payment_service(db_session).process(mismatched)
+
+    async with db_session.begin():
+        processed_count = await db_session.scalar(
+            select(func.count())
+            .select_from(ProcessedEvent)
+            .where(ProcessedEvent.event_id == mismatched.event_id)
+        )
+    assert processed_count == 0
