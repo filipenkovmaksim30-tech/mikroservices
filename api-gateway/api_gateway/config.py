@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     auth_base_url: str
     orders_base_url: str
     analytics_base_url: str
+    payment_base_url: str
     refresh_cookie_name: str = Field(default="refresh_token", min_length=1)
 
     jwt_public_key_path: Path

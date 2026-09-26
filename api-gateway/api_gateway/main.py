@@ -15,6 +15,7 @@ from api_gateway.routers.catalog import router as catalog_router
 from api_gateway.routers.dependencies import get_settings
 from api_gateway.routers.health import router as health_router
 from api_gateway.routers.orders import router as order_router
+from api_gateway.routers.payments import router as payment_router
 
 api_router = APIRouter(prefix="/api")
 
@@ -86,5 +87,6 @@ api_router.include_router(admin_catalog_router)
 api_router.include_router(order_router)
 api_router.include_router(admin_order_router)
 api_router.include_router(analytic_router)
+api_router.include_router(payment_router)
 
 app.include_router(api_router)

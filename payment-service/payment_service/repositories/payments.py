@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from payment_service.db.models.payments import Payment, PaymentStatus
 
+
 class PaymentRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
@@ -24,7 +25,9 @@ class PaymentRepository:
         await self._session.flush()
         return payment
 
-    async def mark_failed(self, payment: Payment, failure_code: str, completed_at: datetime) -> Payment:
+    async def mark_failed(
+        self, payment: Payment, failure_code: str, completed_at: datetime
+    ) -> Payment:
         payment.status = PaymentStatus.FAILED
         payment.failure_code = failure_code
         payment.completed_at = completed_at
@@ -37,6 +40,20 @@ class PaymentRepository:
         statement = select(Payment).where(Payment.id == payment_id)
         result = await self._session.execute(statement)
         return result.scalar_one_or_none()
+
+    async def get_payments(
+        self, limit: int, offset: int, status: PaymentStatus | None
+    ) -> list[Payment]:
+        statement = select(Payment)
+        if status is not None:
+            statement = statement.where(Payment.status == status)
+        statement = (
+            statement.order_by(Payment.created_at.desc(), Payment.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        result = await self._session.execute(statement)
+        return list(result.scalars().all())
 
     async def get_by_id_for_update(self, payment_id: UUID) -> Payment | None:
         statement = select(Payment).where(Payment.id == payment_id).with_for_update()

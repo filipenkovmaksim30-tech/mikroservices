@@ -41,6 +41,7 @@ x-payment-service: &payment-service
     POSTGRESQL_PORT: 5432
     RABBITMQ_HOST: rabbitmq
     RABBITMQ_PORT: 5672
+    JWT_PUBLIC_KEY_PATH: /run/secrets/auth_jwt_public.pem
   restart: unless-stopped
 
 x-catalog-service: &catalog-service
@@ -81,6 +82,7 @@ x-api-gateway: &api-gateway
     GATEWAY_CATALOG_BASE_URL: http://catalog-api:8000
     GATEWAY_ORDERS_BASE_URL: http://order-api:8000
     GATEWAY_ANALYTICS_BASE_URL: http://analytics-api:8000
+    GATEWAY_PAYMENT_BASE_URL: http://payment-api:8000
   restart: unless-stopped
 
 
@@ -147,6 +149,16 @@ services:
       analytics-migrations:
         condition: service_completed_successfully
 
+  payment-api:
+    <<: *payment-service
+    command: ["python", "-m", "uvicorn", "payment_service.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    expose:
+      - 8000
+    volumes:
+      - ./auth-service/secrets/jwt_public.pem:/run/secrets/auth_jwt_public.pem:ro
+    depends_on:
+      payment-migrations:
+        condition: service_completed_successfully
   catalog-api:
     <<: *catalog-service
     command: ["python", "-m", "uvicorn", "catalog_service.api:app", "--host", "0.0.0.0", "--port", "8000"]
