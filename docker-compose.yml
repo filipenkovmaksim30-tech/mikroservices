@@ -516,6 +516,37 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+  
+  loki:
+    image: grafana/loki:3.7.0
+    volumes:
+      - ./infra/monitoring/loki/loki-config.yaml:/etc/loki/config.yaml:ro
+      - loki_data:/loki
+    command: ["-config.file=/etc/loki/config.yaml"]
+
+  alloy:
+    image: grafana/alloy:v1.20.0
+    volumes:
+      - ./infra/monitoring/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy_data:/var/lib/alloy/data
+    command: ["run", "--storage.path=/var/lib/alloy/data", "/etc/alloy/config.alloy"]
+
+  grafana:
+    image: grafana/grafana:13.2.2
+    volumes: 
+      - ./infra/monitoring/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+    - "127.0.0.1:3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD}
+
+  prometheus:
+    image: prom/prometheus:v3.13.3
+    volumes:
+      - ./infra/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
 
 volumes:
   rabbitmq_data:
@@ -526,5 +557,9 @@ volumes:
   payment_postgres_data:
   catalog_postgres_data:
   auth_postgres_data:
+  loki_data:
+  alloy_data:
+  grafana_data:
+  prometheus_data:
   
     
