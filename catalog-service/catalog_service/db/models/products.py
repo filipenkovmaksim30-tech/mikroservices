@@ -1,12 +1,15 @@
 
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 from uuid import UUID
 from sqlalchemy import Boolean, CheckConstraint, Index, Uuid, String, Integer, Numeric, DateTime, func, true
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from catalog_service.db.models.base import Base
 
+if TYPE_CHECKING:
+    from catalog_service.db.models.product_image import ProductImage
 
 class Product(Base):
     __tablename__ = "products"
@@ -24,11 +27,16 @@ class Product(Base):
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), onupdate=func.now(), nullable=True)
-
+    model_3d_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    images: Mapped[list["ProductImage"]] = relationship(
+        back_populates="product",
+        lazy="raise",
+    )
     __table_args__ = (
         CheckConstraint("price > 0",name="ck_products_price_positive"),
         CheckConstraint("stock_quantity >= 0", name="ck_stock_quantity_non_negative"),
         Index("ix_products_category", "category")
     )
+
 
     

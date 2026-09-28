@@ -5,7 +5,9 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
 
+from catalog_service.config import MediaSettings
 from catalog_service.observability import install_http_logging
+from catalog_service.storage.s3 import create_s3_storage
 from catalog_service.db.session import async_engine
 from catalog_service.exceptions import (
     InsufficientStockError,
@@ -16,10 +18,15 @@ from catalog_service.exceptions import (
 from catalog_service.routers.admin_products import router as admin_products_router
 from catalog_service.routers.products import router as products_router
 
+media_settings = MediaSettings()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
-        yield
+        async with create_s3_storage(settings=media_settings) as storage:
+            app.state.media_storage = storage
+            yield
     finally:
         await async_engine.dispose()
 

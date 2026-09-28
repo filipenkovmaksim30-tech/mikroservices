@@ -54,3 +54,13 @@ class Settings(BaseSettings):
             f"{self.rabbitmq_vhost}"
         )
 
+class MediaSettings(BaseSettings):
+    model_config = SettingsConfigDict(
+        case_sensitive=False,
+        env_prefix="S3_",
+    )
+
+    endpoint_url: str
+    bucket: str
+    access_key: str
+    secret_key: SecretStr

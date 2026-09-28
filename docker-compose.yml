@@ -49,7 +49,7 @@ x-catalog-service: &catalog-service
   build:
     context: ./catalog-service
   env_file: ./catalog-service/.env
-  environment:
+  environment: &catalog-env
     POSTGRESQL_HOST: catalog-postgres
     POSTGRESQL_PORT: 5432
     RABBITMQ_HOST: rabbitmq
@@ -164,6 +164,12 @@ services:
     command: ["python", "-m", "uvicorn", "catalog_service.api:app", "--host", "0.0.0.0", "--port", "8000"]
     expose:
       - 8000
+    environment:
+      <<: *catalog-env
+      S3_ENDPOINT_URL: http://weed-mini:8333
+      S3_BUCKET: ${S3_BUCKET}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
     volumes:
       - ./auth-service/secrets/jwt_public.pem:/run/secrets/auth_jwt_public.pem:ro
     depends_on:
@@ -493,6 +499,16 @@ services:
       - api-gateway
     restart: unless-stopped
 
+  weed-mini:
+    image: chrislusf/seaweedfs:4.47
+    environment:
+      S3_BUCKET: ${S3_BUCKET}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+    volumes:
+      - product_media_data:/data
+    command: ["mini", "-dir=/data"]
+
   redis:
     image: redis:7.2-alpine
     environment:
@@ -566,5 +582,6 @@ volumes:
   alloy_data:
   grafana_data:
   prometheus_data:
+  product_media_data:
   
     
