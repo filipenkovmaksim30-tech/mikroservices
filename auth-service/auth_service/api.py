@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 from auth_service.observability import install_http_logging
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from prometheus_client import make_asgi_app
 
 from auth_service.db.session import async_engine
 from auth_service.exceptions import (
@@ -40,6 +41,8 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 @app.exception_handler(EmailAlreadyRegisteredError)
 async def handle_email_already_registered(

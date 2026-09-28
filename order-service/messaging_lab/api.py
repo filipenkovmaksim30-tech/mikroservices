@@ -20,6 +20,7 @@ from messaging_lab.exceptions import (
 )
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from prometheus_client import make_asgi_app
 
 from messaging_lab.routers.orders import limiter
 from messaging_lab.routers.orders import router as orders_router
@@ -56,6 +57,8 @@ app = FastAPI(
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 @app.exception_handler(OrderNotFoundError)
 async def handle_order_not_found(

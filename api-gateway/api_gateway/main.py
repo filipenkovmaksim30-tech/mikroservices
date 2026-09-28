@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from prometheus_client import make_asgi_app
 
 from api_gateway.observability import install_http_logging
 from api_gateway.api_clients.http import create_http_client
@@ -39,6 +40,9 @@ app = FastAPI(
     title="Orderflow API-Gateway",
     lifespan=lifespan
 )
+
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 @app.exception_handler(httpx.TimeoutException)
 async def handle_timeout(

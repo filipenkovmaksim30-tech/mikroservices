@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from analytics_service.exceptions import InvalidAccessTokenError, OrderNotFoundError, PermissionDeniedError
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from prometheus_client import make_asgi_app
 
 from analytics_service.observability import install_http_logging
 from analytics_service.db.session import async_engine
@@ -25,6 +26,9 @@ app = FastAPI(
     title="Analytics Service",
     version="0.1.0",
 )
+
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 @app.exception_handler(InvalidAccessTokenError)
 async def handle_invalid_acces_token(

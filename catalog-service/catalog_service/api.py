@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from prometheus_client import make_asgi_app
 
 from catalog_service.observability import install_http_logging
 from catalog_service.db.session import async_engine
@@ -28,6 +29,9 @@ app = FastAPI(
     title="Product Service",
     version="0.1.0"
 )
+
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 @app.exception_handler(ProductNotFoundError)
 async def handle_product_not_found(

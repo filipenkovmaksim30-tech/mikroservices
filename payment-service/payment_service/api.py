@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
+from prometheus_client import make_asgi_app
 
 from payment_service.observability import install_http_logging
 from payment_service.db.session import async_engine
@@ -30,6 +31,8 @@ app = FastAPI(
     version="0.1.0"
 )
 
+metrics_app = make_asgi_app()
+app.mount("/metrics", metrics_app)
 
 @app.exception_handler(PaymentNotFoundError)
 async def handle_payment_not_found(
