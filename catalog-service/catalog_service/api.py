@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
+from catalog_service.media.image_processing import InvalidProductImageError
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
@@ -13,16 +14,17 @@ from catalog_service.exceptions import (
     InsufficientStockError,
     InvalidAccessTokenError,
     PermissionDeniedError,
+    ProductImageLimitError,
     ProductNotFoundError,
 )
 from catalog_service.routers.admin_products import router as admin_products_router
 from catalog_service.routers.products import router as products_router
 
-media_settings = MediaSettings()
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    media_settings = MediaSettings()
     try:
         async with create_s3_storage(settings=media_settings) as storage:
             app.state.media_storage = storage
@@ -57,6 +59,26 @@ async def handle_product_infficient_stock(
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
+        content={"detail": str(exc)},
+    )
+
+@app.exception_handler(ProductImageLimitError)
+async def handle_product_image_limit(
+    request: Request,
+    exc: ProductImageLimitError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
+        content={"detail": str(exc)},
+    )
+
+@app.exception_handler(InvalidProductImageError)
+async def handle_invalid_product_image(
+    request: Request,
+    exc: InvalidProductImageError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={"detail": str(exc)},
     )
 

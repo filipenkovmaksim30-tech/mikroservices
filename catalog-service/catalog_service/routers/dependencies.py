@@ -1,8 +1,11 @@
-from typing import Annotated
+from typing import Annotated, cast
 from functools import lru_cache
 
 
-from fastapi import Depends
+from catalog_service.repositories.product_image import ProductImageRepository
+from catalog_service.services.product_media import ProductMediaService
+from catalog_service.storage.s3 import S3MediaStorage
+from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,7 +24,6 @@ bearer_scheme = HTTPBearer(auto_error=False)
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
-
 
 @lru_cache(maxsize=1)
 def get_token_verifier() -> TokenVerifier:
@@ -65,3 +67,18 @@ async def get_product_service(session: SessionDependency) -> ProductsService:
     )
 
 ServiceDependency = Annotated[ProductsService, Depends(get_product_service)]
+
+
+async def get_media_service(
+    request: Request,
+    session: SessionDependency,
+) -> ProductMediaService:
+    storage = cast(S3MediaStorage, request.app.state.media_storage)
+    return ProductMediaService(
+        session=session,
+        products=ProductRepository(session),
+        images=ProductImageRepository(session),
+        storage=storage,
+    )
+
+MediaServiceDependency = Annotated[ProductMediaService, Depends(get_media_service)]

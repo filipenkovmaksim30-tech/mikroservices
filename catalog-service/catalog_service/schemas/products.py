@@ -55,6 +55,21 @@ class ProductRead(ContractModel):
     stock_quantity: int = Field(ge=0)
     is_active: bool
 
+class ProductImageRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    position: int = Field(ge=0)
+
+
+class ProductImagePublicRead(ProductImageRead):
+    url: str
+    thumbnail_url: str
+
+
+class ProductPublicRead(ProductRead):
+    images: list[ProductImagePublicRead]
+    model_3d_url: str | None
+
 class ProductBatchRequest(ContractModel):
     product_ids: set[UUID] = Field(min_length=1, max_length=100)
 
@@ -72,7 +87,7 @@ class ProductBatchResponse(ContractModel):
 
 
 class ProductListResponse(ContractModel):
-    items: list[ProductRead]
+    items: list[ProductPublicRead]
     total: int = Field(ge=0)
     limit: int = Field(ge=1, le=100)
     offset: int = Field(ge=0)

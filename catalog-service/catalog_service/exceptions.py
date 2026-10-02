@@ -45,6 +45,12 @@ class ProductNotFoundError(Exception):
     def __init__(self, product_id: UUID):
         super().__init__(f"Product with id={product_id} not found")
 
+class ProductImageLimitError(Exception):
+    """The product already has eight images."""
+
+class ProductImageNotFoundError(Exception):
+    def __init__(self, image_id: UUID):
+        super().__init__(f" image with image_id={image_id} not found")
 
 class InvalidAccessTokenError(Exception):
     def __init__(self) -> None:

@@ -1,9 +1,8 @@
+import warnings
 from dataclasses import dataclass
 from io import BytesIO
-import warnings
 
 from PIL import Image, ImageOps
-
 
 MAX_FILE_BYTES = 5 * 1024 * 1024
 MAX_PIXELS = 12_000_000
@@ -28,7 +27,7 @@ def _encode_webp(source: Image.Image, max_side: int) -> bytes:
     return output.getvalue()
 
 
-def proccess_product_image(data: bytes):
+def process_product_image(data: bytes) -> ProcessedProductImage:
     if not data or len(data) > MAX_FILE_BYTES:
         raise InvalidProductImageError("Image must be between 1 byte and 5 MB")
 

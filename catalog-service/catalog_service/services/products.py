@@ -28,7 +28,7 @@ class ProductsService:
 
     async def get_product_by_id(self, product_id: UUID) -> Product:
         async with self._session.begin():
-            product = await self._repository.get_by_id(product_id)
+            product = await self._repository.get_by_id_with_images(product_id)
             if product is None:
                 raise ProductNotFoundError(product_id=product_id)
         return product

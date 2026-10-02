@@ -2,8 +2,10 @@ from uuid import UUID
 
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from catalog_service.db.models.products import Product
+
 
 class ProductRepository:
     def __init__(
@@ -24,6 +26,15 @@ class ProductRepository:
         result = await self._session.execute(statement)
         product = result.scalar_one_or_none()
         return product
+
+    async def get_by_id_with_images(self, product_id: UUID) -> Product | None:
+        statement = (
+            select(Product)
+            .options(selectinload(Product.images))
+            .where(Product.id == product_id)
+        )
+        result = await self._session.execute(statement)
+        return result.scalar_one_or_none()
 
     async def set_stock_quantity(self, product_id: UUID, quantity: int):
         statement = (
@@ -68,6 +79,7 @@ class ProductRepository:
     async def get_list_products(self, limit: int, offset: int) -> list[Product]:
         statement = (
             select(Product)
+            .options(selectinload(Product.images))
             .where(Product.is_active.is_(True))
             .order_by(Product.created_at.desc(), Product.id.desc())
             .offset(offset)

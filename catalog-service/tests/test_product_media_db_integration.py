@@ -1,0 +1,79 @@
+from unittest.mock import AsyncMock
+
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from catalog_service.exceptions import ProductImageLimitError
+from catalog_service.media.image_processing import ProcessedProductImage
+from catalog_service.repositories.product_image import ProductImageRepository
+from catalog_service.repositories.products import ProductRepository
+from catalog_service.services.product_media import ProductMediaService
+from catalog_service.storage.s3 import S3MediaStorage
+from tests.test_reservations_db_integration import product
+
+pytestmark = pytest.mark.integration
+pytest_plugins = ("tests.test_reservations_db_integration",)
+
+
+def media_service(session: AsyncSession, storage: S3MediaStorage) -> ProductMediaService:
+    return ProductMediaService(
+        session=session,
+        products=ProductRepository(session),
+        images=ProductImageRepository(session),
+        storage=storage,
+    )
+
+
+@pytest.fixture(autouse=True)
+def fake_processing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "catalog_service.services.product_media.process_product_image",
+        lambda _: ProcessedProductImage(large=b"large", thumbnail=b"thumbnail"),
+    )
+
+
+async def test_upload_and_delete_persist_gallery_positions(db_session: AsyncSession) -> None:
+    item = product(3)
+    async with db_session.begin():
+        await ProductRepository(db_session).add(item)
+
+    storage = AsyncMock(spec=S3MediaStorage)
+    service = media_service(db_session, storage)
+    first = await service.add_image(item.id, b"first")
+    second = await service.add_image(item.id, b"second")
+
+    async with db_session.begin():
+        stored = await ProductImageRepository(db_session).list_by_product_id(item.id)
+    assert [image.id for image in stored] == [first.id, second.id]
+    assert [image.position for image in stored] == [0, 1]
+
+    await service.delete_image(item.id, first.id)
+
+    async with db_session.begin():
+        remaining = await ProductImageRepository(db_session).list_by_product_id(item.id)
+    assert [image.id for image in remaining] == [second.id]
+    assert remaining[0].position == 0
+    storage.delete.assert_any_await(first.large_object_key)
+    storage.delete.assert_any_await(first.thumbnail_object_key)
+
+
+async def test_ninth_upload_rolls_back_and_removes_new_objects(
+    db_session: AsyncSession,
+) -> None:
+    item = product(3)
+    async with db_session.begin():
+        await ProductRepository(db_session).add(item)
+
+    storage = AsyncMock(spec=S3MediaStorage)
+    service = media_service(db_session, storage)
+    for _ in range(8):
+        await service.add_image(item.id, b"photo")
+
+    with pytest.raises(ProductImageLimitError):
+        await service.add_image(item.id, b"ninth")
+
+    async with db_session.begin():
+        stored = await ProductImageRepository(db_session).list_by_product_id(item.id)
+    assert len(stored) == 8
+    assert [image.position for image in stored] == list(range(8))
+    assert storage.delete.await_count == 2

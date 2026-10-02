@@ -508,6 +508,7 @@ services:
     volumes:
       - product_media_data:/data
     command: ["mini", "-dir=/data"]
+    restart: unless-stopped
 
   redis:
     image: redis:7.2-alpine
