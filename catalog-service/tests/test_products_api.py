@@ -9,8 +9,10 @@ import pytest
 from catalog_service.api import app
 from catalog_service.db.models.product_image import ProductImage
 from catalog_service.db.models.products import Product
+from catalog_service.exceptions import ProductImageOrderConflictError
 from catalog_service.routers.dependencies import (
     get_current_principal,
+    get_media_service,
     get_product_service,
     get_token_verifier,
 )
@@ -150,3 +152,85 @@ async def test_admin_can_create_product(isolated_app: object) -> None:
     assert response.status_code == 201
     assert response.json()["id"] == str(item.id)
     service.create_product.assert_awaited_once()
+
+
+async def test_admin_reorders_images(isolated_app: object) -> None:
+    product_id = uuid4()
+    first, second = [
+        ProductImage(id=uuid4(), product_id=product_id, position=position,
+                     large_object_key="large", thumbnail_object_key="thumbnail")
+        for position in range(2)
+    ]
+    second.position, first.position = 0, 1
+    service = SimpleNamespace(reorder_images=AsyncMock(return_value=[second, first]))
+    app.dependency_overrides[get_current_principal] = lambda: SimpleNamespace(role="admin")
+    app.dependency_overrides[get_media_service] = lambda: service
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.put(
+            f"/admin/products/{product_id}/images/order",
+            json={"image_ids": [str(second.id), str(first.id)]},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"id": str(second.id), "position": 0},
+        {"id": str(first.id), "position": 1},
+    ]
+    service.reorder_images.assert_awaited_once_with(product_id, [second.id, first.id])
+
+
+async def test_reorder_duplicate_ids_is_422(isolated_app: object) -> None:
+    product_id, image_id = uuid4(), uuid4()
+    service = SimpleNamespace(reorder_images=AsyncMock())
+    app.dependency_overrides[get_current_principal] = lambda: SimpleNamespace(role="admin")
+    app.dependency_overrides[get_media_service] = lambda: service
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.put(
+            f"/admin/products/{product_id}/images/order",
+            json={"image_ids": [str(image_id), str(image_id)]},
+        )
+
+    assert response.status_code == 422
+    service.reorder_images.assert_not_awaited()
+
+
+async def test_reorder_stale_gallery_is_409(isolated_app: object) -> None:
+    product_id = uuid4()
+    service = SimpleNamespace(
+        reorder_images=AsyncMock(side_effect=ProductImageOrderConflictError())
+    )
+    app.dependency_overrides[get_current_principal] = lambda: SimpleNamespace(role="admin")
+    app.dependency_overrides[get_media_service] = lambda: service
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.put(
+            f"/admin/products/{product_id}/images/order",
+            json={"image_ids": [str(uuid4())]},
+        )
+
+    assert response.status_code == 409
+
+
+async def test_non_admin_cannot_reorder_images(isolated_app: object) -> None:
+    product_id = uuid4()
+    service = SimpleNamespace(reorder_images=AsyncMock())
+    app.dependency_overrides[get_current_principal] = lambda: SimpleNamespace(role="customer")
+    app.dependency_overrides[get_media_service] = lambda: service
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.put(
+            f"/admin/products/{product_id}/images/order", json={"image_ids": []}
+        )
+
+    assert response.status_code == 403
+    service.reorder_images.assert_not_awaited()

@@ -98,6 +98,44 @@ async def test_admin_payment_forwards_request(
     assert requests[0].headers["authorization"] == "Bearer signed-token"
 
 
+async def test_admin_image_reorder_forwards_order_and_bearer(
+    gateway: tuple[httpx.AsyncClient, list[httpx.Request]],
+) -> None:
+    client, requests = gateway
+    product_id, first_id, second_id = uuid4(), uuid4(), uuid4()
+    response = await client.put(
+        f"/api/admin/products/{product_id}/images/order",
+        headers={"Authorization": "Bearer signed-token"},
+        json={"image_ids": [str(second_id), str(first_id)]},
+    )
+
+    assert response.status_code == 200
+    assert requests[0].method == "PUT"
+    assert requests[0].url.path == f"/admin/products/{product_id}/images/order"
+    assert requests[0].headers["authorization"] == "Bearer signed-token"
+    assert requests[0].content == (
+        b'{"image_ids":["' + str(second_id).encode() + b'","' + str(first_id).encode() + b'"]}'
+    )
+
+
+async def test_non_admin_cannot_reorder_images(
+    gateway: tuple[httpx.AsyncClient, list[httpx.Request]],
+) -> None:
+    from api_gateway.main import app
+    from api_gateway.routers.dependencies import get_token_verifier
+
+    client, requests = gateway
+    app.dependency_overrides[get_token_verifier]().decode_access_token.return_value.role = "user"
+    response = await client.put(
+        f"/api/admin/products/{uuid4()}/images/order",
+        headers={"Authorization": "Bearer signed-token"},
+        json={"image_ids": []},
+    )
+
+    assert response.status_code == 403
+    assert requests == []
+
+
 async def test_create_order_requires_idempotency_key(
     gateway: tuple[httpx.AsyncClient, list[httpx.Request]],
 ) -> None:

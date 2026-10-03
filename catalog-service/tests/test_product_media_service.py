@@ -7,6 +7,7 @@ from catalog_service.db.models.product_image import ProductImage
 from catalog_service.exceptions import (
     ProductImageLimitError,
     ProductImageNotFoundError,
+    ProductImageOrderConflictError,
     ProductNotFoundError,
 )
 from catalog_service.media.image_processing import ProcessedProductImage
@@ -225,3 +226,55 @@ async def test_s3_delete_failure_does_not_undo_committed_image_deletion(
 
     assert images.images == []
     assert storage.delete_calls == [image.large_object_key, image.thumbnail_object_key]
+
+
+async def test_reorder_images_updates_positions_without_touching_storage(
+    setup_media: Callable[..., tuple],
+) -> None:
+    product_id = uuid4()
+    first, second, third = [make_image(product_id, position) for position in range(3)]
+    service, session, images, storage = setup_media(images=[first, second, third])
+
+    reordered = await service.reorder_images(product_id, [third.id, first.id, second.id])
+
+    assert [image.id for image in reordered] == [third.id, first.id, second.id]
+    assert [(image.id, image.position) for image in images.images] == [
+        (first.id, 1),
+        (second.id, 2),
+        (third.id, 0),
+    ]
+    assert session.begin_calls == 1
+    assert storage.put_calls == storage.delete_calls == []
+
+
+@pytest.mark.parametrize("ids", ["missing", "duplicate", "foreign"])
+async def test_reorder_rejects_nonmatching_gallery_without_changes(
+    setup_media: Callable[..., tuple], ids: str,
+) -> None:
+    product_id = uuid4()
+    first, second = [make_image(product_id, position) for position in range(2)]
+    service, _, images, storage = setup_media(images=[first, second])
+    requested_ids = {
+        "missing": [first.id],
+        "duplicate": [first.id, first.id],
+        "foreign": [first.id, uuid4()],
+    }[ids]
+
+    with pytest.raises(ProductImageOrderConflictError):
+        await service.reorder_images(product_id, requested_ids)
+
+    assert [image.position for image in images.images] == [0, 1]
+    assert storage.put_calls == storage.delete_calls == []
+
+
+async def test_reorder_unknown_product_does_not_change_images(
+    setup_media: Callable[..., tuple],
+) -> None:
+    product_id = uuid4()
+    image = make_image(product_id, 0)
+    service, _, images, _ = setup_media(exists=False, images=[image])
+
+    with pytest.raises(ProductNotFoundError):
+        await service.reorder_images(product_id, [image.id])
+
+    assert images.images[0].position == 0

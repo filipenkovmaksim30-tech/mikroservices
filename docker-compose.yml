@@ -163,7 +163,7 @@ services:
     <<: *catalog-service
     command: ["python", "-m", "uvicorn", "catalog_service.api:app", "--host", "0.0.0.0", "--port", "8000"]
     expose:
-      - 8000
+     - 8000
     environment:
       <<: *catalog-env
       S3_ENDPOINT_URL: http://weed-mini:8333

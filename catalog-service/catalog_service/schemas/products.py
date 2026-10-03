@@ -61,6 +61,16 @@ class ProductImageRead(BaseModel):
     position: int = Field(ge=0)
 
 
+class ProductImageOrderUpdate(ContractModel):
+    image_ids: list[UUID] = Field(max_length=8)
+
+    @model_validator(mode="after")
+    def validate_unique_ids(self) -> Self:
+        if len(self.image_ids) != len(set(self.image_ids)):
+            raise ValueError("image_ids must not contain duplicates")
+        return self
+
+
 class ProductImagePublicRead(ProductImageRead):
     url: str
     thumbnail_url: str

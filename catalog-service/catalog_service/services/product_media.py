@@ -5,7 +5,12 @@ from uuid import UUID, uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from catalog_service.db.models.product_image import ProductImage
-from catalog_service.exceptions import ProductImageLimitError, ProductImageNotFoundError, ProductNotFoundError
+from catalog_service.exceptions import (
+    ProductImageLimitError,
+    ProductImageNotFoundError,
+    ProductImageOrderConflictError,
+    ProductNotFoundError,
+)
 from catalog_service.media.image_processing import process_product_image
 from catalog_service.repositories.product_image import ProductImageRepository
 from catalog_service.repositories.products import ProductRepository
@@ -103,3 +108,22 @@ class ProductMediaService:
                 await self._storage.delete(key)
             except Exception:
                 logger.exception("media.cleanup.failed")
+
+    async def reorder_images(
+        self, product_id: UUID, image_ids: list[UUID]
+    ) -> list[ProductImage]:
+        async with self._session.begin():
+            product = await self._products.get_by_id_for_update(product_id)
+            if product is None:
+                raise ProductNotFoundError(product_id)
+
+            current_images = await self._images.list_by_product_id(product_id)
+            images_by_id = {image.id: image for image in current_images}
+            if len(image_ids) != len(current_images) or set(image_ids) != set(images_by_id):
+                raise ProductImageOrderConflictError()
+
+            ordered_images = [images_by_id[image_id] for image_id in image_ids]
+            for position, image in enumerate(ordered_images):
+                image.position = position
+
+        return ordered_images

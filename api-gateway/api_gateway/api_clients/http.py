@@ -41,8 +41,9 @@ async def request_upstream(
     params: dict[str, str | int] | None = None,
     json_body: object | None = None,
     form_data: dict[str, str] | None = None,
+    files: dict[str, tuple[str, bytes, str]] | None = None,
     cookies: dict[str, str] | None = None,
-    headers: dict[str, str] | None = None
+    headers: dict[str, str] | None = None,
 ) -> httpx.Response:
     request_id = current_request_id()
     forwarded_headers = dict(headers or {})
@@ -54,6 +55,7 @@ async def request_upstream(
         params=params,
         json=json_body,
         data=form_data,
+        files=files,
         cookies=cookies,
         headers=forwarded_headers
     )

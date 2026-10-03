@@ -1,25 +1,26 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from catalog_service.media.image_processing import InvalidProductImageError
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from prometheus_client import make_asgi_app
 
 from catalog_service.config import MediaSettings
-from catalog_service.observability import install_http_logging
-from catalog_service.storage.s3 import create_s3_storage
 from catalog_service.db.session import async_engine
 from catalog_service.exceptions import (
     InsufficientStockError,
     InvalidAccessTokenError,
     PermissionDeniedError,
     ProductImageLimitError,
+    ProductImageNotFoundError,
+    ProductImageOrderConflictError,
     ProductNotFoundError,
 )
+from catalog_service.media.image_processing import InvalidProductImageError
+from catalog_service.observability import install_http_logging
 from catalog_service.routers.admin_products import router as admin_products_router
 from catalog_service.routers.products import router as products_router
-
+from catalog_service.storage.s3 import create_s3_storage
 
 
 @asynccontextmanager
@@ -79,6 +80,27 @@ async def handle_invalid_product_image(
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={"detail": str(exc)},
+    )
+
+@app.exception_handler(ProductImageNotFoundError)
+async def handle_product_image_not_found(
+    request: Request,
+    exc: ProductImageNotFoundError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_404_NOT_FOUND,
+        content={"detail": str(exc)},
+    )
+
+
+@app.exception_handler(ProductImageOrderConflictError)
+async def handle_product_image_order_conflict(
+    request: Request,
+    exc: ProductImageOrderConflictError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_409_CONFLICT,
         content={"detail": str(exc)},
     )
 

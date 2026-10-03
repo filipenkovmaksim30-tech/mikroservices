@@ -52,6 +52,13 @@ class ProductImageNotFoundError(Exception):
     def __init__(self, image_id: UUID):
         super().__init__(f" image with image_id={image_id} not found")
 
+
+class ProductImageOrderConflictError(Exception):
+    """The requested order does not contain exactly the current gallery images."""
+
+    def __init__(self) -> None:
+        super().__init__("Image order does not match the current gallery")
+
 class InvalidAccessTokenError(Exception):
     def __init__(self) -> None:
         super().__init__("Invalid access token")

@@ -61,19 +61,42 @@ async def test_ninth_upload_rolls_back_and_removes_new_objects(
     db_session: AsyncSession,
 ) -> None:
     item = product(3)
+    product_id = item.id
     async with db_session.begin():
         await ProductRepository(db_session).add(item)
 
     storage = AsyncMock(spec=S3MediaStorage)
     service = media_service(db_session, storage)
     for _ in range(8):
-        await service.add_image(item.id, b"photo")
+        await service.add_image(product_id, b"photo")
 
     with pytest.raises(ProductImageLimitError):
-        await service.add_image(item.id, b"ninth")
+        await service.add_image(product_id, b"ninth")
 
     async with db_session.begin():
-        stored = await ProductImageRepository(db_session).list_by_product_id(item.id)
+        stored = await ProductImageRepository(db_session).list_by_product_id(product_id)
     assert len(stored) == 8
     assert [image.position for image in stored] == list(range(8))
     assert storage.delete.await_count == 2
+
+
+async def test_reorder_swaps_positions_in_one_transaction(db_session: AsyncSession) -> None:
+    item = product(3)
+    async with db_session.begin():
+        await ProductRepository(db_session).add(item)
+
+    storage = AsyncMock(spec=S3MediaStorage)
+    service = media_service(db_session, storage)
+    first = await service.add_image(item.id, b"first")
+    second = await service.add_image(item.id, b"second")
+
+    reordered = await service.reorder_images(item.id, [second.id, first.id])
+
+    async with db_session.begin():
+        stored = await ProductImageRepository(db_session).list_by_product_id(item.id)
+    assert [image.id for image in reordered] == [second.id, first.id]
+    assert [(image.id, image.position) for image in stored] == [
+        (second.id, 0),
+        (first.id, 1),
+    ]
+    storage.delete.assert_not_awaited()
