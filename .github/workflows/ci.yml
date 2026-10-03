@@ -6,25 +6,67 @@ on:
     branches:
       - main
 
+permissions:
+  contents: read
+
 jobs:
-  auth:
+  backend-tests:
+    name: Tests / ${{ matrix.service }}
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: auth-service
+            test_db_env: AUTH_TEST_DATABASE_URL
+          - service: order-service
+            test_db_env: ORDER_TEST_DATABASE_URL
+          - service: payment-service
+            test_db_env: PAYMENT_TEST_DATABASE_URL
+          - service: catalog-service
+            test_db_env: CATALOG_TEST_DATABASE_URL
+          - service: analytics-service
+            test_db_env: ANALYTICS_TEST_DATABASE_URL
+
     env:
-      AUTH_TEST_DATABASE_URL: postgresql+asyncpg://ci:ci@127.0.0.1:5432/auth_test
       POSTGRESQL_HOST: 127.0.0.1
+      POSTGRESQL_PORT: "5432"
       POSTGRESQL_USER: ci
       POSTGRESQL_PASSWORD: ci
-      POSTGRESQL_DB: auth_test
-      POSTGRESQL_PORT: 5432
-
-      REDIS_URL: redis://127.0.0.1:6379/0
+      POSTGRESQL_DB: ci_test
 
       JWT_PRIVATE_KEY_PATH: /tmp/orderflow-ci-jwt-private.pem
       JWT_PUBLIC_KEY_PATH: /tmp/orderflow-ci-jwt-public.pem
       JWT_ALGORITHM: RS256
-      JWT_ACCESS_TOKEN_EXPIRE_MINUTES: 15
       JWT_ISSUER: auth-service
       JWT_AUDIENCE: orderflow-services
+
+      REDIS_URL: redis://127.0.0.1:6379/0
+
+      RABBITMQ_HOST: 127.0.0.1
+      RABBITMQ_PORT: "5672"
+      RABBITMQ_USER: ci
+      RABBITMQ_PASSWORD: ci
+      RABBITMQ_VHOST: "/"
+
+      KAFKA_BOOTSTRAP_SERVERS: 127.0.0.1:9092
+      KAFKA_ANALYTICS_TOPIC: orderflow.analytics.v1
+      KAFKA_ANALYTICS_DLQ_TOPIC: orderflow.analytics.dlq.v1
+      KAFKA_CONSUMER_GROUP: analytics-ci
+
+      SMTP_HOST: 127.0.0.1
+      SMTP_PORT: "587"
+      SMTP_USERNAME: ci
+      SMTP_PASSWORD: ci
+      SMTP_OWNER_EMAIL: ci@example.com
+
+      CATALOG_BASE_URL: http://127.0.0.1:8002
+
+      S3_ENDPOINT_URL: http://127.0.0.1:8333
+      S3_BUCKET: product-media
+      S3_ACCESS_KEY: ci
+      S3_SECRET_KEY: ci
 
     services:
       postgres:
@@ -32,11 +74,11 @@ jobs:
         env:
           POSTGRES_USER: ci
           POSTGRES_PASSWORD: ci
-          POSTGRES_DB: auth_test
+          POSTGRES_DB: ci_test
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U ci -d auth_test"
+          --health-cmd "pg_isready -U ci -d ci_test"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -44,7 +86,7 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-      
+
       - name: Install uv
         uses: astral-sh/setup-uv@v3
         with:
@@ -53,20 +95,60 @@ jobs:
 
       - name: Install Python
         run: uv python install 3.13
-      
+
       - name: Install Dependencies
+        working-directory: ${{ matrix.service }}
         run: uv sync --locked
-        working-directory: auth-service
 
       - name: Generate test JWT keys
         run: |
           openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$JWT_PRIVATE_KEY_PATH"
           openssl pkey -in "$JWT_PRIVATE_KEY_PATH" -pubout -out "$JWT_PUBLIC_KEY_PATH"
 
-      - name: Run Pytest
-        working-directory: auth-service
-        run: uv run pytest
+      - name: Set integration test database URL
+        env:
+          TEST_DB_ENV: ${{ matrix.test_db_env }}
+        run: |
+          echo "${TEST_DB_ENV}=postgresql+asyncpg://ci:ci@127.0.0.1:5432/ci_test" >> "$GITHUB_ENV"
 
+      - name: Run tests
+        working-directory: ${{ matrix.service }}
+        run: uv run pytest -q -ra
 
+  gateway-tests:
+    name: Tests / api-gateway
+    runs-on: ubuntu-latest
 
-  
+    env:
+      GATEWAY_CATALOG_BASE_URL: http://catalog.test
+      GATEWAY_AUTH_BASE_URL: http://auth.test
+      GATEWAY_ORDERS_BASE_URL: http://orders.test
+      GATEWAY_ANALYTICS_BASE_URL: http://analytics.test
+      GATEWAY_PAYMENT_BASE_URL: http://payment.test
+      GATEWAY_JWT_PUBLIC_KEY_PATH: /tmp/orderflow-ci-jwt-public.pem
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          version: "0.12.5"
+
+      - name: Install Python
+        run: uv python install 3.13
+
+      - name: Install Dependencies
+        working-directory: api-gateway
+        run: uv sync --locked
+
+      - name: Generate test JWT keys
+        run: |
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out /tmp/orderflow-ci-jwt-private.pem
+          openssl pkey -in /tmp/orderflow-ci-jwt-private.pem -pubout -out "$GATEWAY_JWT_PUBLIC_KEY_PATH"
+
+      - name: Run pytest
+        working-directory: api-gateway
+        run: uv run pytest -q -ra
