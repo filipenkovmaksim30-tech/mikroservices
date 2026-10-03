@@ -14,11 +14,13 @@ from api_gateway.schemas.catalog import (
     ProductCreate,
     ProductImageOrderUpdate,
     ProductImageRead,
+    ProductModelRead,
     ProductRead,
     ProductUpdate,
 )
 
 MAX_FILE_BYTES = 5 * 1024 * 1024
+MAX_GLB_BYTES = 25 * 1024 * 1024
 
 router = APIRouter(
     tags=["Admin Catalog"], 
@@ -220,4 +222,64 @@ async def delete_image(
         headers=authorization_headers,
     )
 
+    return build_gateway_response(upstream_response)
+
+
+@router.put(
+    "/{product_id}/model-3d",
+    response_model=ProductModelRead,
+    summary="Загрузить или заменить 3D-модель товара",
+)
+async def replace_model(
+    authorization_headers: AuthorizationHeadersDependency,
+    settings: SettingsDependency,
+    client: HttpClientDependency,
+    product_id: UUID,
+    file: Annotated[UploadFile, File()],
+) -> Response:
+    try:
+        file_bytes = await file.read(MAX_GLB_BYTES + 1)
+    finally:
+        await file.close()
+    if len(file_bytes) > MAX_GLB_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="GLB must not exceed 25 MiB",
+        )
+
+    url = f"{settings.catalog_base_url.rstrip('/')}/admin/products/{product_id}/model-3d"
+    upstream_response = await request_upstream(
+        client=client,
+        method="PUT",
+        url=url,
+        files={
+            "file": (
+                file.filename or "upload.glb",
+                file_bytes,
+                file.content_type or "application/octet-stream",
+            )
+        },
+        headers=authorization_headers,
+    )
+    return build_gateway_response(upstream_response)
+
+
+@router.delete(
+    "/{product_id}/model-3d",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Удалить 3D-модель товара",
+)
+async def delete_model(
+    authorization_headers: AuthorizationHeadersDependency,
+    settings: SettingsDependency,
+    client: HttpClientDependency,
+    product_id: UUID,
+) -> Response:
+    url = f"{settings.catalog_base_url.rstrip('/')}/admin/products/{product_id}/model-3d"
+    upstream_response = await request_upstream(
+        client=client,
+        method="DELETE",
+        url=url,
+        headers=authorization_headers,
+    )
     return build_gateway_response(upstream_response)

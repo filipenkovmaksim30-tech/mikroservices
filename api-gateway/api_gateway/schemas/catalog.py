@@ -69,3 +69,7 @@ class ProductImageOrderUpdate(ContractModel):
         if len(self.image_ids) != len(set(self.image_ids)):
             raise ValueError("image_ids must not contain duplicates")
         return self
+
+
+class ProductModelRead(ContractModel):
+    model_3d_url: str

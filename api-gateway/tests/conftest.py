@@ -31,6 +31,8 @@ async def gateway() -> AsyncIterator[tuple[httpx.AsyncClient, list[httpx.Request
                 json={"access_token": "rotated-access", "token_type": "bearer"},
                 headers={"set-cookie": "refresh_token=rotated; HttpOnly; Path=/api/auth"},
             )
+        if request.method == "DELETE" and request.url.path.endswith("/model-3d"):
+            return httpx.Response(204)
         return httpx.Response(200, json={"ok": True})
 
     settings = SimpleNamespace(

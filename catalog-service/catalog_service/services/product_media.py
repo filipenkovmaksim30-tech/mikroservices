@@ -11,6 +11,7 @@ from catalog_service.exceptions import (
     ProductImageOrderConflictError,
     ProductNotFoundError,
 )
+from catalog_service.media.glb_validation import validate_product_glb
 from catalog_service.media.image_processing import process_product_image
 from catalog_service.repositories.product_image import ProductImageRepository
 from catalog_service.repositories.products import ProductRepository
@@ -127,3 +128,46 @@ class ProductMediaService:
                 image.position = position
 
         return ordered_images
+
+    async def replace_model(self, product_id: UUID, file_bytes: bytes) -> str:
+        await asyncio.to_thread(validate_product_glb, file_bytes)
+        new_key = f"products/{product_id}/models/{uuid4()}.glb"
+        old_key: str | None = None
+        committed = False
+
+        try:
+            await self._storage.put(new_key, file_bytes, "model/gltf-binary")
+            async with self._session.begin():
+                product = await self._products.get_by_id_for_update(product_id)
+                if product is None:
+                    raise ProductNotFoundError(product_id)
+                old_key = product.model_3d_key
+                product.model_3d_key = new_key
+            committed = True
+        finally:
+            if not committed:
+                try:
+                    await self._storage.delete(new_key)
+                except Exception:
+                    logger.exception("media.cleanup.failed", extra={"product_id": str(product_id)})
+
+        if old_key is not None:
+            try:
+                await self._storage.delete(old_key)
+            except Exception:
+                logger.exception("media.cleanup.failed", extra={"product_id": str(product_id)})
+        return new_key
+
+    async def delete_model(self, product_id: UUID) -> None:
+        async with self._session.begin():
+            product = await self._products.get_by_id_for_update(product_id)
+            if product is None:
+                raise ProductNotFoundError(product_id)
+            old_key = product.model_3d_key
+            product.model_3d_key = None
+
+        if old_key is not None:
+            try:
+                await self._storage.delete(old_key)
+            except Exception:
+                logger.exception("media.cleanup.failed", extra={"product_id": str(product_id)})

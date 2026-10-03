@@ -118,6 +118,56 @@ async def test_admin_image_reorder_forwards_order_and_bearer(
     )
 
 
+async def test_admin_model_upload_forwards_multipart_and_bearer(
+    gateway: tuple[httpx.AsyncClient, list[httpx.Request]],
+) -> None:
+    client, requests = gateway
+    product_id = uuid4()
+    response = await client.put(
+        f"/api/admin/products/{product_id}/model-3d",
+        files={"file": ("model.glb", b"glb-content", "model/gltf-binary")},
+        headers={"Authorization": "Bearer signed-token"},
+    )
+
+    assert response.status_code == 200
+    assert requests[0].method == "PUT"
+    assert requests[0].url.path == f"/admin/products/{product_id}/model-3d"
+    assert requests[0].headers["authorization"] == "Bearer signed-token"
+    assert b"glb-content" in requests[0].content
+
+
+async def test_admin_model_delete_forwards_and_returns_204(
+    gateway: tuple[httpx.AsyncClient, list[httpx.Request]],
+) -> None:
+    client, requests = gateway
+    product_id = uuid4()
+    response = await client.delete(
+        f"/api/admin/products/{product_id}/model-3d",
+        headers={"Authorization": "Bearer signed-token"},
+    )
+
+    assert response.status_code == 204
+    assert requests[0].url.path == f"/admin/products/{product_id}/model-3d"
+
+
+async def test_non_admin_model_upload_stops_at_gateway(
+    gateway: tuple[httpx.AsyncClient, list[httpx.Request]],
+) -> None:
+    from api_gateway.main import app
+    from api_gateway.routers.dependencies import get_token_verifier
+
+    client, requests = gateway
+    app.dependency_overrides[get_token_verifier]().decode_access_token.return_value.role = "user"
+    response = await client.put(
+        f"/api/admin/products/{uuid4()}/model-3d",
+        files={"file": ("model.glb", b"glb-content")},
+        headers={"Authorization": "Bearer signed-token"},
+    )
+
+    assert response.status_code == 403
+    assert requests == []
+
+
 async def test_non_admin_cannot_reorder_images(
     gateway: tuple[httpx.AsyncClient, list[httpx.Request]],
 ) -> None:
