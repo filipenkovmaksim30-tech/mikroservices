@@ -3,6 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, UploadFile, status
 
+from catalog_service.media.glb_validation import MAX_GLB_BYTES, InvalidProductModelError
 from catalog_service.media.image_processing import (
     MAX_FILE_BYTES,
     InvalidProductImageError,
@@ -16,6 +17,7 @@ from catalog_service.schemas.products import (
     ProductCreate,
     ProductImageOrderUpdate,
     ProductImageRead,
+    ProductModelRead,
     ProductRead,
     ProductUpdate,
 )
@@ -125,3 +127,35 @@ async def delete_image(
     image_id: UUID,
 ) -> None:
     await service.delete_image(product_id, image_id)
+
+
+@router.put(
+    "/{product_id}/model-3d",
+    response_model=ProductModelRead,
+    summary="Загрузить или заменить 3D-модель товара",
+)
+async def replace_model(
+    product_id: UUID,
+    service: MediaServiceDependency,
+    file: Annotated[UploadFile, File()],
+) -> ProductModelRead:
+    try:
+        file_bytes = await file.read(MAX_GLB_BYTES + 1)
+    finally:
+        await file.close()
+    if len(file_bytes) > MAX_GLB_BYTES:
+        raise InvalidProductModelError("GLB must not exceed 25 MiB")
+    key = await service.replace_model(product_id, file_bytes)
+    return ProductModelRead(model_3d_url=f"/media/{key}")
+
+
+@router.delete(
+    "/{product_id}/model-3d",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Удалить 3D-модель товара",
+)
+async def delete_model(
+    product_id: UUID,
+    service: MediaServiceDependency,
+) -> None:
+    await service.delete_model(product_id)

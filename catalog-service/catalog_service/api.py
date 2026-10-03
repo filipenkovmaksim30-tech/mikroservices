@@ -16,6 +16,7 @@ from catalog_service.exceptions import (
     ProductImageOrderConflictError,
     ProductNotFoundError,
 )
+from catalog_service.media.glb_validation import InvalidProductModelError
 from catalog_service.media.image_processing import InvalidProductImageError
 from catalog_service.observability import install_http_logging
 from catalog_service.routers.admin_products import router as admin_products_router
@@ -90,6 +91,17 @@ async def handle_product_image_not_found(
 ) -> JSONResponse:
     return JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
+        content={"detail": str(exc)},
+    )
+
+
+@app.exception_handler(InvalidProductModelError)
+async def handle_invalid_product_model(
+    request: Request,
+    exc: InvalidProductModelError,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         content={"detail": str(exc)},
     )
 

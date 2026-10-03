@@ -80,6 +80,10 @@ class ProductPublicRead(ProductRead):
     images: list[ProductImagePublicRead]
     model_3d_url: str | None
 
+
+class ProductModelRead(ContractModel):
+    model_3d_url: str
+
 class ProductBatchRequest(ContractModel):
     product_ids: set[UUID] = Field(min_length=1, max_length=100)
 

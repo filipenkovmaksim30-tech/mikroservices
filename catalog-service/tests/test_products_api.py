@@ -10,6 +10,7 @@ from catalog_service.api import app
 from catalog_service.db.models.product_image import ProductImage
 from catalog_service.db.models.products import Product
 from catalog_service.exceptions import ProductImageOrderConflictError
+from catalog_service.media.glb_validation import InvalidProductModelError
 from catalog_service.routers.dependencies import (
     get_current_principal,
     get_media_service,
@@ -105,6 +106,22 @@ async def test_public_product_list_supports_products_without_images(isolated_app
     assert response.status_code == 200
     assert response.json()["items"][0]["images"] == []
     assert response.json()["items"][0]["model_3d_url"] is None
+
+
+async def test_public_product_exposes_model_url(isolated_app: object) -> None:
+    item = product()
+    item.images = []
+    item.model_3d_key = f"products/{item.id}/models/{uuid4()}.glb"
+    service = SimpleNamespace(get_product_by_id=AsyncMock(return_value=item))
+    app.dependency_overrides[get_product_service] = lambda: service
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.get(f"/products/{item.id}")
+
+    assert response.status_code == 200
+    assert response.json()["model_3d_url"] == f"/media/{item.model_3d_key}"
 
 
 async def test_admin_product_create_requires_token(isolated_app: object) -> None:
@@ -234,3 +251,75 @@ async def test_non_admin_cannot_reorder_images(isolated_app: object) -> None:
 
     assert response.status_code == 403
     service.reorder_images.assert_not_awaited()
+
+
+async def test_admin_uploads_model_and_receives_public_url(isolated_app: object) -> None:
+    product_id = uuid4()
+    key = f"products/{product_id}/models/{uuid4()}.glb"
+    service = SimpleNamespace(replace_model=AsyncMock(return_value=key))
+    app.dependency_overrides[get_current_principal] = lambda: SimpleNamespace(role="admin")
+    app.dependency_overrides[get_media_service] = lambda: service
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.put(
+            f"/admin/products/{product_id}/model-3d",
+            files={"file": ("model.glb", b"model", "application/octet-stream")},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"model_3d_url": f"/media/{key}"}
+    service.replace_model.assert_awaited_once_with(product_id, b"model")
+
+
+async def test_invalid_model_is_422(isolated_app: object) -> None:
+    product_id = uuid4()
+    service = SimpleNamespace(
+        replace_model=AsyncMock(side_effect=InvalidProductModelError("Invalid GLB"))
+    )
+    app.dependency_overrides[get_current_principal] = lambda: SimpleNamespace(role="admin")
+    app.dependency_overrides[get_media_service] = lambda: service
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.put(
+            f"/admin/products/{product_id}/model-3d",
+            files={"file": ("fake.glb", b"broken", "model/gltf-binary")},
+        )
+
+    assert response.status_code == 422
+
+
+async def test_non_admin_cannot_upload_model(isolated_app: object) -> None:
+    product_id = uuid4()
+    service = SimpleNamespace(replace_model=AsyncMock())
+    app.dependency_overrides[get_current_principal] = lambda: SimpleNamespace(role="customer")
+    app.dependency_overrides[get_media_service] = lambda: service
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.put(
+            f"/admin/products/{product_id}/model-3d",
+            files={"file": ("model.glb", b"model")},
+        )
+
+    assert response.status_code == 403
+    service.replace_model.assert_not_awaited()
+
+
+async def test_admin_deletes_model(isolated_app: object) -> None:
+    product_id = uuid4()
+    service = SimpleNamespace(delete_model=AsyncMock())
+    app.dependency_overrides[get_current_principal] = lambda: SimpleNamespace(role="admin")
+    app.dependency_overrides[get_media_service] = lambda: service
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        response = await client.delete(f"/admin/products/{product_id}/model-3d")
+
+    assert response.status_code == 204
+    service.delete_model.assert_awaited_once_with(product_id)

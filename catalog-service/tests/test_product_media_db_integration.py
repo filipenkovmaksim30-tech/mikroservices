@@ -30,6 +30,9 @@ def fake_processing(monkeypatch: pytest.MonkeyPatch) -> None:
         "catalog_service.services.product_media.process_product_image",
         lambda _: ProcessedProductImage(large=b"large", thumbnail=b"thumbnail"),
     )
+    monkeypatch.setattr(
+        "catalog_service.services.product_media.validate_product_glb", lambda _: None
+    )
 
 
 async def test_upload_and_delete_persist_gallery_positions(db_session: AsyncSession) -> None:
@@ -100,3 +103,29 @@ async def test_reorder_swaps_positions_in_one_transaction(db_session: AsyncSessi
         (first.id, 1),
     ]
     storage.delete.assert_not_awaited()
+
+
+async def test_model_key_is_persisted_replaced_and_removed(db_session: AsyncSession) -> None:
+    item = product(3)
+    product_id = item.id
+    async with db_session.begin():
+        await ProductRepository(db_session).add(item)
+
+    storage = AsyncMock(spec=S3MediaStorage)
+    service = media_service(db_session, storage)
+    first_key = await service.replace_model(product_id, b"first")
+    second_key = await service.replace_model(product_id, b"second")
+
+    async with db_session.begin():
+        stored = await ProductRepository(db_session).get_by_id(product_id)
+        assert stored is not None
+        assert stored.model_3d_key == second_key
+    assert first_key != second_key
+    storage.delete.assert_awaited_once_with(first_key)
+
+    await service.delete_model(product_id)
+    async with db_session.begin():
+        stored = await ProductRepository(db_session).get_by_id(product_id)
+        assert stored is not None
+        assert stored.model_3d_key is None
+    storage.delete.assert_any_await(second_key)

@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
@@ -10,14 +11,16 @@ from catalog_service.exceptions import (
     ProductImageOrderConflictError,
     ProductNotFoundError,
 )
+from catalog_service.media.glb_validation import InvalidProductModelError
 from catalog_service.media.image_processing import ProcessedProductImage
 from catalog_service.services.product_media import ProductMediaService
 
 
 class FakeSession:
-    def __init__(self) -> None:
+    def __init__(self, fail_commit: bool = False) -> None:
         self.active = False
         self.begin_calls = 0
+        self.fail_commit = fail_commit
 
     def begin(self) -> "FakeSession":
         self.begin_calls += 1
@@ -29,14 +32,17 @@ class FakeSession:
 
     async def __aexit__(self, *_: object) -> None:
         self.active = False
+        if self.fail_commit:
+            raise OSError("DB commit failed")
 
 
 class FakeProducts:
-    def __init__(self, exists: bool = True) -> None:
+    def __init__(self, exists: bool = True, model_key: str | None = None) -> None:
         self.exists = exists
+        self.product = SimpleNamespace(model_3d_key=model_key)
 
     async def get_by_id_for_update(self, product_id: UUID) -> object | None:
-        return object() if self.exists else None
+        return self.product if self.exists else None
 
 
 class FakeImages:
@@ -78,7 +84,7 @@ class FakeStorage:
 
     async def put(self, key: str, data: bytes, content_type: str) -> None:
         assert not self.session.active, "S3 upload must not hold a DB transaction"
-        assert content_type == "image/webp"
+        assert content_type in {"image/webp", "model/gltf-binary"}
         self.put_calls.append(key)
         if len(self.put_calls) == self.fail_on_put:
             raise OSError("S3 upload failed")
@@ -109,19 +115,24 @@ def setup_media(monkeypatch: pytest.MonkeyPatch) -> Callable[..., tuple]:
         "catalog_service.services.product_media.process_product_image",
         lambda _: ProcessedProductImage(large=b"large", thumbnail=b"thumbnail"),
     )
+    monkeypatch.setattr(
+        "catalog_service.services.product_media.validate_product_glb", lambda _: None
+    )
 
     def build(
         *,
         exists: bool = True,
         images: list[ProductImage] | None = None,
         fail_on_put: int | None = None,
+        model_key: str | None = None,
+        fail_commit: bool = False,
     ) -> tuple[ProductMediaService, FakeSession, FakeImages, FakeStorage]:
-        session = FakeSession()
+        session = FakeSession(fail_commit=fail_commit)
         image_repo = FakeImages(images)
         storage = FakeStorage(session, fail_on_put=fail_on_put)
         service = ProductMediaService(
             session=session,  # type: ignore[arg-type]
-            products=FakeProducts(exists),  # type: ignore[arg-type]
+            products=FakeProducts(exists, model_key),  # type: ignore[arg-type]
             images=image_repo,  # type: ignore[arg-type]
             storage=storage,  # type: ignore[arg-type]
         )
@@ -278,3 +289,106 @@ async def test_reorder_unknown_product_does_not_change_images(
         await service.reorder_images(product_id, [image.id])
 
     assert images.images[0].position == 0
+
+
+async def test_model_upload_and_replace_use_new_key_and_cleanup_old(
+    setup_media: Callable[..., tuple],
+) -> None:
+    product_id = uuid4()
+    service, session, _, storage = setup_media()
+    product = service._products.product  # type: ignore[attr-defined]
+
+    first_key = await service.replace_model(product_id, b"first")
+    second_key = await service.replace_model(product_id, b"second")
+
+    assert first_key != second_key
+    assert first_key.startswith(f"products/{product_id}/models/")
+    assert second_key.endswith(".glb")
+    assert product.model_3d_key == second_key
+    assert storage.objects == {second_key: b"second"}
+    assert storage.delete_calls == [first_key]
+    assert session.begin_calls == 2
+
+
+async def test_model_upload_failure_does_not_start_db_transaction(
+    setup_media: Callable[..., tuple],
+) -> None:
+    service, session, _, storage = setup_media(fail_on_put=1)
+
+    with pytest.raises(OSError, match="S3 upload failed"):
+        await service.replace_model(uuid4(), b"model")
+
+    assert session.begin_calls == 0
+    assert storage.objects == {}
+
+
+async def test_invalid_model_is_rejected_before_s3_or_db(
+    setup_media: Callable[..., tuple], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service, session, _, storage = setup_media()
+
+    def reject(_: bytes) -> None:
+        raise InvalidProductModelError("Invalid GLB")
+
+    monkeypatch.setattr("catalog_service.services.product_media.validate_product_glb", reject)
+
+    with pytest.raises(InvalidProductModelError):
+        await service.replace_model(uuid4(), b"invalid")
+
+    assert session.begin_calls == 0
+    assert storage.put_calls == storage.delete_calls == []
+
+
+async def test_model_db_failure_cleans_new_key_but_not_old(
+    setup_media: Callable[..., tuple],
+) -> None:
+    old_key = "products/old.glb"
+    service, session, _, storage = setup_media(model_key=old_key, fail_commit=True)
+
+    with pytest.raises(OSError, match="DB commit failed"):
+        await service.replace_model(uuid4(), b"model")
+
+    assert session.begin_calls == 1
+    assert storage.objects == {}
+    assert storage.delete_calls == storage.put_calls
+    assert old_key not in storage.delete_calls
+
+
+async def test_model_unknown_product_cleans_uploaded_file(
+    setup_media: Callable[..., tuple],
+) -> None:
+    service, _, _, storage = setup_media(exists=False)
+    with pytest.raises(ProductNotFoundError):
+        await service.replace_model(uuid4(), b"model")
+    assert storage.objects == {}
+    assert storage.delete_calls == storage.put_calls
+
+
+async def test_delete_model_is_repeatable_and_does_not_hold_transaction_during_s3(
+    setup_media: Callable[..., tuple],
+) -> None:
+    key = "products/existing.glb"
+    service, session, _, storage = setup_media(model_key=key)
+    product = service._products.product  # type: ignore[attr-defined]
+    storage.objects[key] = b"model"
+
+    await service.delete_model(uuid4())
+    await service.delete_model(uuid4())
+
+    assert product.model_3d_key is None
+    assert storage.delete_calls == [key]
+    assert storage.objects == {}
+    assert session.begin_calls == 2
+
+
+async def test_model_cleanup_failure_does_not_undo_replacement(
+    setup_media: Callable[..., tuple],
+) -> None:
+    old_key = "products/old.glb"
+    service, _, _, storage = setup_media(model_key=old_key)
+    storage.fail_delete_key = old_key
+
+    new_key = await service.replace_model(uuid4(), b"model")
+
+    assert service._products.product.model_3d_key == new_key  # type: ignore[attr-defined]
+    assert storage.objects[new_key] == b"model"
