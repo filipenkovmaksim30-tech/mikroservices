@@ -152,3 +152,52 @@ jobs:
       - name: Run pytest
         working-directory: api-gateway
         run: uv run pytest -q -ra
+  publish-images:
+    name: Build image / ${{ matrix.service }}
+    needs:
+      - backend-tests
+      - gateway-tests
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: auth-service
+            context: ./auth-service
+          - service: order-service
+            context: ./order-service
+          - service: payment-service
+            context: ./payment-service
+          - service: catalog-service
+            context: ./catalog-service
+          - service: analytics-service
+            context: ./analytics-service
+          - service: api-gateway
+            context: ./api-gateway
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image and publish on main
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+          tags: ghcr.io/${{ github.repository }}/${{ matrix.service }}:${{ github.sha }}
